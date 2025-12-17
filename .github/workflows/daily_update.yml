@@ -1,0 +1,48 @@
+name: Daily Feature Update
+
+on:
+  schedule:
+    # 每天12:30 UTC (13:30 CET)运行
+    - cron: "30 12 * * *"
+
+  # 允许手动触发
+  workflow_dispatch:
+
+jobs:
+  update-features:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout代码
+        uses: actions/checkout@v3
+
+      - name: 设置Python环境
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: 安装依赖
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 运行每日特征管道
+        env:
+          ENTSOE_API_KEY: ${{ secrets.ENTSOE_API_KEY }}
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          HOPSWORKS_PROJECT_NAME: ${{ secrets.HOPSWORKS_PROJECT_NAME }}
+        run: |
+          python pipelines/2_daily_feature_pipeline.py
+
+      - name: 发送通知(如果失败)
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: 每日特征管道失败告警
+          body: 特征管道执行失败,请检查日志
+          to: ${{ secrets.NOTIFICATION_EMAIL }}

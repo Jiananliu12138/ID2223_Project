@@ -98,11 +98,12 @@ def backfill_monthly(start_date: str, end_date: str, fsm: FeatureStoreManager):
             electricity_df = cleaned_df[electricity_cols]
             weather_df = cleaned_df[weather_cols]
             
-            # 上传到特征组
-            fsm.create_electricity_feature_group(electricity_df, online=False)
-            fsm.create_weather_feature_group(weather_df, online=False)
+            # 保存到本地 (不上传到 Hopsworks)
+            month_str = month_start.strftime('%Y-%m')
+            fsm.save_electricity_data_local(electricity_df, month_str)
+            fsm.save_weather_data_local(weather_df, month_str)
             
-            logger.info(f"✅ 月份 {month_start.strftime('%Y-%m')} 回填完成!")
+            logger.info(f"✅ 月份 {month_start.strftime('%Y-%m')} 数据已保存到本地!")
             
         except Exception as e:
             logger.error(f"❌ 月份 {month_start.strftime('%Y-%m')} 回填失败: {e}")
@@ -130,9 +131,9 @@ def main():
         logger.info("用户取消回填")
         return
     
-    # 初始化Feature Store
-    logger.info("\n初始化Hopsworks连接...")
-    fsm = FeatureStoreManager()
+    # 初始化Feature Store (仅本地模式，不连接Hopsworks)
+    logger.info("\n初始化本地数据管理器...")
+    fsm = FeatureStoreManager(local_only=True)
     
     # 执行回填
     backfill_monthly(start_date, end_date, fsm)

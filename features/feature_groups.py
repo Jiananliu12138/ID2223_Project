@@ -3,6 +3,8 @@ Hopsworks特征组管理
 """
 import hopsworks
 import pandas as pd
+import os
+from pathlib import Path
 from config.settings import (
     HOPSWORKS_API_KEY, 
     HOPSWORKS_PROJECT_NAME,
@@ -15,147 +17,131 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# 本地数据目录
+LOCAL_DATA_DIR = Path("data/local_cache")
+LOCAL_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 
 class FeatureStoreManager:
     """Hopsworks Feature Store管理器"""
     
-    def __init__(self, api_key: str = None, project_name: str = None):
+    def __init__(self, api_key: str = None, project_name: str = None, local_only: bool = False):
         """
         初始化Feature Store连接
         
         Args:
             api_key: Hopsworks API key
             project_name: Hopsworks项目名称
+            local_only: 是否仅本地模式（不连接Hopsworks）
         """
-        self.api_key = api_key or HOPSWORKS_API_KEY
-        self.project_name = project_name or HOPSWORKS_PROJECT_NAME
+        self.local_only = local_only
         
-        if not self.api_key:
-            raise ValueError("Hopsworks API key未设置,请在.env文件中配置")
-        
-        logger.info(f"连接到Hopsworks项目: {self.project_name}")
-        self.project = hopsworks.login(
-            api_key_value=self.api_key,
-            project=self.project_name
-        )
-        self.fs = self.project.get_feature_store()
-        logger.info("Hopsworks连接成功")
+        if not local_only:
+            # 在线模式：连接到 Hopsworks
+            self.api_key = api_key or HOPSWORKS_API_KEY
+            self.project_name = project_name or HOPSWORKS_PROJECT_NAME
+            
+            if not self.api_key:
+                raise ValueError("Hopsworks API key未设置,请在.env文件中配置")
+            
+            logger.info(f"Connecting to Hopsworks project: {self.project_name}")
+            self.project = hopsworks.login(
+                api_key_value=self.api_key,
+                project=self.project_name
+            )
+            self.fs = self.project.get_feature_store()
+            logger.info("✅ Hopsworks connection successful")
+        else:
+            # 本地模式：不连接
+            logger.info("📁 Local-only mode: data will be saved locally")
     
-    def create_electricity_feature_group(self, df: pd.DataFrame) -> None:
+    def save_electricity_data_local(self, df: pd.DataFrame, month_str: str) -> str:
         """
-        创建或获取电力市场特征组
+        保存电力市场数据到本地
         
         Args:
-            df: 包含电力市场数据的DataFrame
-        """
-        logger.info(f"🔄 Creating/updating Feature Group: {ELECTRICITY_FG_NAME}")
-        
-        # 先尝试获取已存在的特征组（避免 get_or_create 的 bug）
-        try:
-            electricity_fg = self.fs.get_feature_group(
-                name=ELECTRICITY_FG_NAME,
-                version=FEATURE_GROUP_VERSION
-            )
-            logger.info(f"✅ Feature Group '{electricity_fg.name}' already exists, using it")
-        except:
-            # 不存在，创建新的
-            logger.info(f"Feature group does not exist, creating new one...")
-            electricity_fg = self.fs.create_feature_group(
-                name=ELECTRICITY_FG_NAME,
-                version=FEATURE_GROUP_VERSION,
-                description="电力市场数据: 日前价格、负载预测、风光发电预测",
-                primary_key=['timestamp'],
-                event_time='timestamp'
-            )
-            logger.info(f"✅ Feature Group '{electricity_fg.name}' created successfully")
-        
-        logger.info(f"   Version: {electricity_fg.version}")
-        logger.info(f"   Primary key: {electricity_fg.primary_key}")
-        
-        # 插入数据
-        logger.info(f"📤 Inserting {len(df)} rows of electricity market data...")
-        electricity_fg.insert(df, wait=True)
-        
-        logger.info(f"✅ Electricity data inserted successfully!")
-    
-    def create_weather_feature_group(self, df: pd.DataFrame) -> None:
-        """
-        创建或获取天气特征组
-        
-        Args:
-            df: 包含天气数据的DataFrame
-        """
-        logger.info(f"🔄 Creating/updating Feature Group: {WEATHER_FG_NAME}")
-        
-        # 先尝试获取已存在的特征组（避免 get_or_create 的 bug）
-        try:
-            weather_fg = self.fs.get_feature_group(
-                name=WEATHER_FG_NAME,
-                version=FEATURE_GROUP_VERSION
-            )
-            logger.info(f"✅ Feature Group '{weather_fg.name}' already exists, using it")
-        except:
-            # 不存在，创建新的
-            logger.info(f"Feature group does not exist, creating new one...")
-            weather_fg = self.fs.create_feature_group(
-                name=WEATHER_FG_NAME,
-                version=FEATURE_GROUP_VERSION,
-                description="SE3区域加权平均天气数据: 温度、风速、太阳辐照度",
-                primary_key=['timestamp'],
-                event_time='timestamp'
-            )
-            logger.info(f"✅ Feature Group '{weather_fg.name}' created successfully")
-        
-        logger.info(f"   Version: {weather_fg.version}")
-        logger.info(f"   Primary key: {weather_fg.primary_key}")
-        
-        # 插入数据
-        logger.info(f"📤 Inserting {len(df)} rows of weather data...")
-        weather_fg.insert(df, wait=True)
-        
-        logger.info(f"✅ Weather data inserted successfully!")
-    
-    def get_feature_view(self, name: str = "electricity_price_fv",
-                        version: int = 1) -> object:
-        """
-        获取或创建特征视图
-        
-        Args:
-            name: 特征视图名称
-            version: 版本号
+            df: 数据DataFrame
+            month_str: 月份标识，如 '2024-01'
             
         Returns:
-            FeatureView对象
+            保存的文件路径
         """
+        filepath = LOCAL_DATA_DIR / f"electricity_{month_str}.parquet"
+        df.to_parquet(filepath, index=False)
+        logger.info(f"💾 电力数据已保存到: {filepath}")
+        return str(filepath)
+    
+    def create_electricity_feature_group(self, df: pd.DataFrame) -> None:
+        """创建或获取电力市场特征组 (极简版)"""
+        logger.info(f"\n🔄 Creating/updating Feature Group: {ELECTRICITY_FG_NAME}")
+        
+        # 完全参考示例代码语法
+        electricity_fg = self.fs.get_or_create_feature_group(
+            name=ELECTRICITY_FG_NAME,
+            version=FEATURE_GROUP_VERSION,
+            description="电力市场数据: 日前价格、负载预测、风光发电预测",
+            primary_key=['timestamp'],
+            event_time="timestamp"
+        )
+        
+        logger.info(f"✅ Feature Group '{electricity_fg.name}' ready")
+        logger.info(f"📤 Inserting {len(df)} rows of electricity data...")
+        
+        # 插入数据
+        electricity_fg.insert(df, wait=True)
+        logger.info("✅ Electricity data inserted successfully!")
+    
+    def save_weather_data_local(self, df: pd.DataFrame, month_str: str) -> str:
+        """
+        保存天气数据到本地
+        
+        Args:
+            df: 数据DataFrame
+            month_str: 月份标识，如 '2024-01'
+            
+        Returns:
+            保存的文件路径
+        """
+        filepath = LOCAL_DATA_DIR / f"weather_{month_str}.parquet"
+        df.to_parquet(filepath, index=False)
+        logger.info(f"💾 天气数据已保存到: {filepath}")
+        return str(filepath)
+    
+    def create_weather_feature_group(self, df: pd.DataFrame) -> None:
+        """创建或获取天气特征组 (极简版)"""
+        logger.info(f"\n🔄 Creating/updating Feature Group: {WEATHER_FG_NAME}")
+        
+        # 完全参考示例代码语法
+        weather_fg = self.fs.get_or_create_feature_group(
+            name=WEATHER_FG_NAME,
+            version=FEATURE_GROUP_VERSION,
+            description="SE3区域加权平均天气数据: 温度、风速、太阳辐照度",
+            primary_key=['timestamp'],
+            event_time="timestamp"
+        )
+        
+        logger.info(f"✅ Feature Group '{weather_fg.name}' ready")
+        logger.info(f"📤 Inserting {len(df)} rows of weather data...")
+        
+        # 插入数据
+        weather_fg.insert(df, wait=True)
+        logger.info("✅ Weather data inserted successfully!")
+
+    def get_feature_view(self, name: str = "electricity_price_fv", version: int = 1):
+        """获取或创建特征视图"""
         try:
             # 尝试获取现有特征视图
             fv = self.fs.get_feature_view(name=name, version=version)
             logger.info(f"获取现有特征视图: {name} v{version}")
             return fv
         except:
-            logger.info(f"创建新特征视图: {name}")
-            
-            # 获取特征组
-            electricity_fg = self.fs.get_feature_group(
-                name=ELECTRICITY_FG_NAME,
-                version=FEATURE_GROUP_VERSION
-            )
-            weather_fg = self.fs.get_feature_group(
-                name=WEATHER_FG_NAME,
-                version=FEATURE_GROUP_VERSION
-            )
-            
-            # 创建查询(JOIN两个特征组)
-            query = electricity_fg.select_all().join(
-                weather_fg.select_all(),
-                on=['timestamp']
-            )
-            
-            # 创建特征视图
-            fv = self.fs.create_feature_view(
+            logger.info(f"Creating new feature view: {name}")
+            fg1 = self.fs.get_feature_group(ELECTRICITY_FG_NAME, FEATURE_GROUP_VERSION)
+            fg2 = self.fs.get_feature_group(WEATHER_FG_NAME, FEATURE_GROUP_VERSION)
+            query = fg1.select_all().join(fg2.select_all(), on=['timestamp'])
+            return self.fs.create_feature_view(
                 name=name,
                 version=version,
-                description="电力价格预测完整特征视图",
                 labels=['price'],
                 query=query
             )

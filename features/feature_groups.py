@@ -52,17 +52,9 @@ class FeatureStoreManager:
         """
         logger.info(f"创建/更新特征组: {ELECTRICITY_FG_NAME}")
         
+        # 使用 get_or_create，如果表已存在的错误则忽略
         try:
-            # 先尝试获取已存在的特征组
-            fg = self.fs.get_feature_group(
-                name=ELECTRICITY_FG_NAME,
-                version=FEATURE_GROUP_VERSION
-            )
-            logger.info(f"特征组 {ELECTRICITY_FG_NAME} 已存在，直接使用")
-        except Exception as e:
-            # 如果不存在，则创建新的
-            logger.info(f"特征组不存在，创建新的: {e}")
-            fg = self.fs.create_feature_group(
+            fg = self.fs.get_or_create_feature_group(
                 name=ELECTRICITY_FG_NAME,
                 version=FEATURE_GROUP_VERSION,
                 description="电力市场数据:价格、负载、发电预测",
@@ -75,7 +67,20 @@ class FeatureStoreManager:
                     "correlations": True
                 }
             )
-            logger.info(f"特征组 {ELECTRICITY_FG_NAME} 创建成功")
+            logger.info(f"特征组 {ELECTRICITY_FG_NAME} 获取/创建成功")
+        except Exception as e:
+            # 如果是"表已存在"错误，尝试直接获取
+            if "already exists" in str(e):
+                logger.warning(f"表已存在错误，尝试直接获取: {e}")
+                fg = self.fs.get_feature_group(
+                    name=ELECTRICITY_FG_NAME,
+                    version=FEATURE_GROUP_VERSION
+                )
+                if fg is None:
+                    raise ValueError(f"无法获取特征组 {ELECTRICITY_FG_NAME}")
+                logger.info(f"成功获取已存在的特征组 {ELECTRICITY_FG_NAME}")
+            else:
+                raise
         
         # 插入数据
         logger.info(f"插入 {len(df)} 条记录到 {ELECTRICITY_FG_NAME}")
@@ -94,17 +99,9 @@ class FeatureStoreManager:
         """
         logger.info(f"创建/更新特征组: {WEATHER_FG_NAME}")
         
+        # 使用 get_or_create，如果表已存在的错误则忽略
         try:
-            # 先尝试获取已存在的特征组
-            fg = self.fs.get_feature_group(
-                name=WEATHER_FG_NAME,
-                version=FEATURE_GROUP_VERSION
-            )
-            logger.info(f"特征组 {WEATHER_FG_NAME} 已存在，直接使用")
-        except Exception as e:
-            # 如果不存在，则创建新的
-            logger.info(f"特征组不存在，创建新的: {e}")
-            fg = self.fs.create_feature_group(
+            fg = self.fs.get_or_create_feature_group(
                 name=WEATHER_FG_NAME,
                 version=FEATURE_GROUP_VERSION,
                 description="SE3区域加权平均天气数据",
@@ -117,7 +114,20 @@ class FeatureStoreManager:
                     "correlations": True
                 }
             )
-            logger.info(f"特征组 {WEATHER_FG_NAME} 创建成功")
+            logger.info(f"特征组 {WEATHER_FG_NAME} 获取/创建成功")
+        except Exception as e:
+            # 如果是"表已存在"错误，尝试直接获取
+            if "already exists" in str(e):
+                logger.warning(f"表已存在错误，尝试直接获取: {e}")
+                fg = self.fs.get_feature_group(
+                    name=WEATHER_FG_NAME,
+                    version=FEATURE_GROUP_VERSION
+                )
+                if fg is None:
+                    raise ValueError(f"无法获取特征组 {WEATHER_FG_NAME}")
+                logger.info(f"成功获取已存在的特征组 {WEATHER_FG_NAME}")
+            else:
+                raise
         
         logger.info(f"插入 {len(df)} 条记录到 {WEATHER_FG_NAME}")
         fg.insert(df, write_options={"wait_for_job": True})

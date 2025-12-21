@@ -48,66 +48,26 @@ class FeatureStoreManager:
         Args:
             df: 包含电力市场数据的DataFrame
         """
-        logger.info(f"创建/更新特征组: {ELECTRICITY_FG_NAME}")
+        logger.info(f"🔄 Creating/updating Feature Group: {ELECTRICITY_FG_NAME}")
         
-        # 先尝试获取已存在的特征组
-        fg = None
-        try:
-            fg = self.fs.get_feature_group(
-                name=ELECTRICITY_FG_NAME,
-                version=FEATURE_GROUP_VERSION
-            )
-            if fg is not None:
-                logger.info(f"✅ 特征组 {ELECTRICITY_FG_NAME} 已存在，直接使用")
-        except Exception as e:
-            logger.info(f"获取特征组失败（可能不存在）: {e}")
+        # 直接使用 get_or_create，让 Hopsworks 处理
+        electricity_fg = self.fs.get_or_create_feature_group(
+            name=ELECTRICITY_FG_NAME,
+            version=FEATURE_GROUP_VERSION,
+            description="电力市场数据: 日前价格、负载预测、风光发电预测",
+            primary_key=['timestamp'],
+            event_time='timestamp'
+        )
         
-        # 如果不存在，则使用 get_or_create（简化参数，避免配置冲突）
-        if fg is None:
-            try:
-                logger.info(f"特征组不存在，使用 get_or_create...")
-                fg = self.fs.get_or_create_feature_group(
-                    name=ELECTRICITY_FG_NAME,
-                    version=FEATURE_GROUP_VERSION,
-                    description="电力市场数据:价格、负载、发电预测",
-                    primary_key=['timestamp'],
-                    event_time='timestamp'
-                    # 移除 online_enabled 和 statistics_config，使用默认值
-                )
-                logger.info(f"✅ 特征组 {ELECTRICITY_FG_NAME} 获取/创建成功")
-            except Exception as e:
-                error_msg = str(e).lower()
-                logger.warning(f"创建特征组遇到错误: {e}")
-                
-                # 检查是否是"已存在"错误（多种可能的表述）
-                if "already exists" in error_msg or "already exist" in error_msg or "270001" in error_msg:
-                    # 创建时发现已存在（并发问题或Hopsworks状态不一致），强制重新获取
-                    logger.warning("⚠️ 表已存在错误，强制重新获取...")
-                    try:
-                        fg = self.fs.get_feature_group(
-                            name=ELECTRICITY_FG_NAME,
-                            version=FEATURE_GROUP_VERSION
-                        )
-                        if fg is not None:
-                            logger.info(f"✅ 成功获取已存在的特征组")
-                        else:
-                            logger.error("❌ get_feature_group 返回 None")
-                    except Exception as get_error:
-                        logger.error(f"❌ 重新获取失败: {get_error}")
-                        fg = None
-                else:
-                    # 其他错误，直接抛出
-                    raise
-        
-        # 最终检查：确保 fg 不是 None
-        if fg is None:
-            raise ValueError(f"❌ 特征组 {ELECTRICITY_FG_NAME} 获取失败，无法插入数据")
+        logger.info(f"✅ Feature Group '{electricity_fg.name}' ready")
+        logger.info(f"   Version: {electricity_fg.version}")
+        logger.info(f"   Primary key: {electricity_fg.primary_key}")
         
         # 插入数据
-        logger.info(f"插入 {len(df)} 条记录到 {ELECTRICITY_FG_NAME}")
-        fg.insert(df, wait=True)  # 使用简化参数，与示例代码一致
+        logger.info(f"📤 Inserting {len(df)} rows of electricity market data...")
+        electricity_fg.insert(df, wait=True)
         
-        logger.info(f"特征组 {ELECTRICITY_FG_NAME} 更新成功")
+        logger.info(f"✅ Electricity data inserted successfully!")
     
     def create_weather_feature_group(self, df: pd.DataFrame) -> None:
         """
@@ -116,65 +76,26 @@ class FeatureStoreManager:
         Args:
             df: 包含天气数据的DataFrame
         """
-        logger.info(f"创建/更新特征组: {WEATHER_FG_NAME}")
+        logger.info(f"🔄 Creating/updating Feature Group: {WEATHER_FG_NAME}")
         
-        # 先尝试获取已存在的特征组
-        fg = None
-        try:
-            fg = self.fs.get_feature_group(
-                name=WEATHER_FG_NAME,
-                version=FEATURE_GROUP_VERSION
-            )
-            if fg is not None:
-                logger.info(f"✅ 特征组 {WEATHER_FG_NAME} 已存在，直接使用")
-        except Exception as e:
-            logger.info(f"获取特征组失败（可能不存在）: {e}")
+        # 直接使用 get_or_create，让 Hopsworks 处理
+        weather_fg = self.fs.get_or_create_feature_group(
+            name=WEATHER_FG_NAME,
+            version=FEATURE_GROUP_VERSION,
+            description="SE3区域加权平均天气数据: 温度、风速、太阳辐照度",
+            primary_key=['timestamp'],
+            event_time='timestamp'
+        )
         
-        # 如果不存在，则使用 get_or_create（简化参数，避免配置冲突）
-        if fg is None:
-            try:
-                logger.info(f"特征组不存在，使用 get_or_create...")
-                fg = self.fs.get_or_create_feature_group(
-                    name=WEATHER_FG_NAME,
-                    version=FEATURE_GROUP_VERSION,
-                    description="SE3区域加权平均天气数据",
-                    primary_key=['timestamp'],
-                    event_time='timestamp'
-                    # 移除 online_enabled 和 statistics_config，使用默认值
-                )
-                logger.info(f"✅ 特征组 {WEATHER_FG_NAME} 获取/创建成功")
-            except Exception as e:
-                error_msg = str(e).lower()
-                logger.warning(f"创建特征组遇到错误: {e}")
-                
-                # 检查是否是"已存在"错误（多种可能的表述）
-                if "already exists" in error_msg or "already exist" in error_msg or "270001" in error_msg:
-                    # 创建时发现已存在（并发问题或Hopsworks状态不一致），强制重新获取
-                    logger.warning("⚠️ 表已存在错误，强制重新获取...")
-                    try:
-                        fg = self.fs.get_feature_group(
-                            name=WEATHER_FG_NAME,
-                            version=FEATURE_GROUP_VERSION
-                        )
-                        if fg is not None:
-                            logger.info(f"✅ 成功获取已存在的特征组")
-                        else:
-                            logger.error("❌ get_feature_group 返回 None")
-                    except Exception as get_error:
-                        logger.error(f"❌ 重新获取失败: {get_error}")
-                        fg = None
-                else:
-                    # 其他错误，直接抛出
-                    raise
+        logger.info(f"✅ Feature Group '{weather_fg.name}' ready")
+        logger.info(f"   Version: {weather_fg.version}")
+        logger.info(f"   Primary key: {weather_fg.primary_key}")
         
-        # 最终检查：确保 fg 不是 None
-        if fg is None:
-            raise ValueError(f"❌ 特征组 {WEATHER_FG_NAME} 获取失败，无法插入数据")
+        # 插入数据
+        logger.info(f"📤 Inserting {len(df)} rows of weather data...")
+        weather_fg.insert(df, wait=True)
         
-        logger.info(f"插入 {len(df)} 条记录到 {WEATHER_FG_NAME}")
-        fg.insert(df, wait=True)  # 使用简化参数，与示例代码一致
-        
-        logger.info(f"特征组 {WEATHER_FG_NAME} 更新成功")
+        logger.info(f"✅ Weather data inserted successfully!")
     
     def get_feature_view(self, name: str = "electricity_price_fv",
                         version: int = 1) -> object:

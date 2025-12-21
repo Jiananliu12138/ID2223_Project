@@ -153,10 +153,12 @@ class ENTSOEClient:
             # 提取光伏数据
             if 'Solar' in data.columns:
                 result_df['solar_forecast'] = data['Solar']
+                logger.info("光伏数据来源: ['Solar']")
             elif 'solar' in [c.lower() for c in data.columns]:
                 # 查找小写solar列
                 solar_col = [c for c in data.columns if 'solar' in c.lower()][0]
                 result_df['solar_forecast'] = data[solar_col]
+                logger.info(f"光伏数据来源: ['{solar_col}']")
             else:
                 result_df['solar_forecast'] = 0
                 logger.warning("未找到光伏数据，填充为0")
@@ -200,8 +202,8 @@ class ENTSOEClient:
         df = prices_df.merge(load_df, on='timestamp', how='left')
         df = df.merge(wind_solar_df, on='timestamp', how='left')
         
-        # 填充缺失值
-        df = df.fillna(method='ffill').fillna(method='bfill')
+        # 填充缺失值（使用新版pandas语法）
+        df = df.ffill().bfill()
         
         logger.info(f"合并后共 {len(df)} 条记录")
         return df

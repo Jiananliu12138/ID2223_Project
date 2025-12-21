@@ -69,6 +69,17 @@ def backfill_monthly(start_date: str, end_date: str, fsm: FeatureStoreManager):
             
             # 3. 合并数据
             logger.info("步骤 3/5: 合并数据...")
+            
+            # 统一时区：将天气数据的时区设置为与市场数据一致
+            if market_df['timestamp'].dt.tz is not None and weather_df['timestamp'].dt.tz is None:
+                # 市场数据有时区，天气数据无时区 → 给天气数据添加时区
+                weather_df['timestamp'] = weather_df['timestamp'].dt.tz_localize(TIMEZONE)
+                logger.info("已将天气数据时区设置为 Europe/Stockholm")
+            elif market_df['timestamp'].dt.tz is None and weather_df['timestamp'].dt.tz is not None:
+                # 天气数据有时区，市场数据无时区 → 给市场数据添加时区
+                market_df['timestamp'] = market_df['timestamp'].dt.tz_localize(TIMEZONE)
+                logger.info("已将市场数据时区设置为 Europe/Stockholm")
+            
             merged_df = market_df.merge(weather_df, on='timestamp', how='left')
             
             # 4. 数据清洗

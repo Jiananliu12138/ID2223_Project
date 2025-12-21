@@ -70,11 +70,11 @@ class DataCleaner:
                     logger.info(f"{col}: 插值填充 {block_size} 个缺失值")
                 else:
                     # 大缺口:使用前向填充
-                    df.loc[block_mask, col] = df[col].fillna(method='ffill')[block_mask]
+                    df.loc[block_mask, col] = df[col].ffill()[block_mask]
                     logger.warning(f"{col}: 连续缺失 {block_size} 小时,使用前向填充")
         
         # 最后处理剩余的缺失值(如开头)
-        df = df.fillna(method='bfill').fillna(method='ffill')
+        df = df.bfill().ffill()
         
         return df
     
@@ -164,7 +164,7 @@ class DataCleaner:
         full_range = pd.date_range(
             start=df[timestamp_col].min(),
             end=df[timestamp_col].max(),
-            freq='H'
+            freq='h'  # 小写h (大写H已弃用)
         )
         
         # 重新索引
@@ -220,7 +220,7 @@ class DataCleaner:
 def main():
     """测试函数"""
     # 创建测试数据
-    dates = pd.date_range('2024-01-01', periods=100, freq='H')
+    dates = pd.date_range('2024-01-01', periods=100, freq='h')
     df = pd.DataFrame({
         'timestamp': dates,
         'price': np.random.uniform(20, 80, 100),

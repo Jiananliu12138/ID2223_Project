@@ -52,20 +52,30 @@ class FeatureStoreManager:
         """
         logger.info(f"创建/更新特征组: {ELECTRICITY_FG_NAME}")
         
-        # 获取或创建特征组
-        fg = self.fs.get_or_create_feature_group(
-            name=ELECTRICITY_FG_NAME,
-            version=FEATURE_GROUP_VERSION,
-            description="电力市场数据:价格、负载、发电预测",
-            primary_key=['timestamp'],
-            event_time='timestamp',
-            online_enabled=online,
-            statistics_config={
-                "enabled": True,
-                "histograms": True,
-                "correlations": True
-            }
-        )
+        try:
+            # 先尝试获取已存在的特征组
+            fg = self.fs.get_feature_group(
+                name=ELECTRICITY_FG_NAME,
+                version=FEATURE_GROUP_VERSION
+            )
+            logger.info(f"特征组 {ELECTRICITY_FG_NAME} 已存在，直接使用")
+        except Exception as e:
+            # 如果不存在，则创建新的
+            logger.info(f"特征组不存在，创建新的: {e}")
+            fg = self.fs.create_feature_group(
+                name=ELECTRICITY_FG_NAME,
+                version=FEATURE_GROUP_VERSION,
+                description="电力市场数据:价格、负载、发电预测",
+                primary_key=['timestamp'],
+                event_time='timestamp',
+                online_enabled=online,
+                statistics_config={
+                    "enabled": True,
+                    "histograms": True,
+                    "correlations": True
+                }
+            )
+            logger.info(f"特征组 {ELECTRICITY_FG_NAME} 创建成功")
         
         # 插入数据
         logger.info(f"插入 {len(df)} 条记录到 {ELECTRICITY_FG_NAME}")
@@ -84,19 +94,30 @@ class FeatureStoreManager:
         """
         logger.info(f"创建/更新特征组: {WEATHER_FG_NAME}")
         
-        fg = self.fs.get_or_create_feature_group(
-            name=WEATHER_FG_NAME,
-            version=FEATURE_GROUP_VERSION,
-            description="SE3区域加权平均天气数据",
-            primary_key=['timestamp'],
-            event_time='timestamp',
-            online_enabled=online,
-            statistics_config={
-                "enabled": True,
-                "histograms": True,
-                "correlations": True
-            }
-        )
+        try:
+            # 先尝试获取已存在的特征组
+            fg = self.fs.get_feature_group(
+                name=WEATHER_FG_NAME,
+                version=FEATURE_GROUP_VERSION
+            )
+            logger.info(f"特征组 {WEATHER_FG_NAME} 已存在，直接使用")
+        except Exception as e:
+            # 如果不存在，则创建新的
+            logger.info(f"特征组不存在，创建新的: {e}")
+            fg = self.fs.create_feature_group(
+                name=WEATHER_FG_NAME,
+                version=FEATURE_GROUP_VERSION,
+                description="SE3区域加权平均天气数据",
+                primary_key=['timestamp'],
+                event_time='timestamp',
+                online_enabled=online,
+                statistics_config={
+                    "enabled": True,
+                    "histograms": True,
+                    "correlations": True
+                }
+            )
+            logger.info(f"特征组 {WEATHER_FG_NAME} 创建成功")
         
         logger.info(f"插入 {len(df)} 条记录到 {WEATHER_FG_NAME}")
         fg.insert(df, write_options={"wait_for_job": True})

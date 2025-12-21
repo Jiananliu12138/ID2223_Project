@@ -50,16 +50,25 @@ class FeatureStoreManager:
         """
         logger.info(f"🔄 Creating/updating Feature Group: {ELECTRICITY_FG_NAME}")
         
-        # 直接使用 get_or_create，让 Hopsworks 处理
-        electricity_fg = self.fs.get_or_create_feature_group(
-            name=ELECTRICITY_FG_NAME,
-            version=FEATURE_GROUP_VERSION,
-            description="电力市场数据: 日前价格、负载预测、风光发电预测",
-            primary_key=['timestamp'],
-            event_time='timestamp'
-        )
+        # 先尝试获取已存在的特征组（避免 get_or_create 的 bug）
+        try:
+            electricity_fg = self.fs.get_feature_group(
+                name=ELECTRICITY_FG_NAME,
+                version=FEATURE_GROUP_VERSION
+            )
+            logger.info(f"✅ Feature Group '{electricity_fg.name}' already exists, using it")
+        except:
+            # 不存在，创建新的
+            logger.info(f"Feature group does not exist, creating new one...")
+            electricity_fg = self.fs.create_feature_group(
+                name=ELECTRICITY_FG_NAME,
+                version=FEATURE_GROUP_VERSION,
+                description="电力市场数据: 日前价格、负载预测、风光发电预测",
+                primary_key=['timestamp'],
+                event_time='timestamp'
+            )
+            logger.info(f"✅ Feature Group '{electricity_fg.name}' created successfully")
         
-        logger.info(f"✅ Feature Group '{electricity_fg.name}' ready")
         logger.info(f"   Version: {electricity_fg.version}")
         logger.info(f"   Primary key: {electricity_fg.primary_key}")
         
@@ -78,16 +87,25 @@ class FeatureStoreManager:
         """
         logger.info(f"🔄 Creating/updating Feature Group: {WEATHER_FG_NAME}")
         
-        # 直接使用 get_or_create，让 Hopsworks 处理
-        weather_fg = self.fs.get_or_create_feature_group(
-            name=WEATHER_FG_NAME,
-            version=FEATURE_GROUP_VERSION,
-            description="SE3区域加权平均天气数据: 温度、风速、太阳辐照度",
-            primary_key=['timestamp'],
-            event_time='timestamp'
-        )
+        # 先尝试获取已存在的特征组（避免 get_or_create 的 bug）
+        try:
+            weather_fg = self.fs.get_feature_group(
+                name=WEATHER_FG_NAME,
+                version=FEATURE_GROUP_VERSION
+            )
+            logger.info(f"✅ Feature Group '{weather_fg.name}' already exists, using it")
+        except:
+            # 不存在，创建新的
+            logger.info(f"Feature group does not exist, creating new one...")
+            weather_fg = self.fs.create_feature_group(
+                name=WEATHER_FG_NAME,
+                version=FEATURE_GROUP_VERSION,
+                description="SE3区域加权平均天气数据: 温度、风速、太阳辐照度",
+                primary_key=['timestamp'],
+                event_time='timestamp'
+            )
+            logger.info(f"✅ Feature Group '{weather_fg.name}' created successfully")
         
-        logger.info(f"✅ Feature Group '{weather_fg.name}' ready")
         logger.info(f"   Version: {weather_fg.version}")
         logger.info(f"   Primary key: {weather_fg.primary_key}")
         

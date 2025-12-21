@@ -83,9 +83,21 @@ class ENTSOEClient:
                 end=end
             )
             
+            # 处理DataFrame和Series两种情况
+            if isinstance(load, pd.DataFrame):
+                # DataFrame: 取第一列或平均值
+                if load.shape[1] == 1:
+                    load_values = load.iloc[:, 0]
+                else:
+                    load_values = load.mean(axis=1)
+                    logger.info(f"负载预测有 {load.shape[1]} 列，使用平均值")
+            else:
+                # Series: 直接使用
+                load_values = load
+            
             df = pd.DataFrame({
                 'timestamp': load.index,
-                'load_forecast': load.values
+                'load_forecast': load_values.values
             })
             
             logger.info(f"成功获取 {len(df)} 条负载预测数据")
@@ -110,41 +122,53 @@ class ENTSOEClient:
         try:
             logger.info(f"获取风光预测: {start} 到 {end}")
             
-            # 获取风电预测
-            wind = self.client.query_wind_and_solar_forecast(
+            # 获取风电和光伏预测
+            data = self.client.query_wind_and_solar_forecast(
                 self.bidding_zone,
                 start=start,
                 end=end,
                 psr_type=None  # 获取所有类型
             )
             
-            df = pd.DataFrame(index=wind.index)
+            # 初始化结果DataFrame
+            result_df = pd.DataFrame(index=data.index)
             
-            # 提取风电和光伏数据
-            if 'Wind Onshore' in wind.columns:
-                df['wind_onshore'] = wind['Wind Onshore']
-            if 'Wind Offshore' in wind.columns:
-                df['wind_offshore'] = wind['Wind Offshore']
-            if 'Solar' in wind.columns:
-                df['solar_forecast'] = wind['Solar']
+            # 提取风电数据（可能有多种类型）
+            wind_total = 0
+            wind_columns = []
             
-            # 计算总风电
-            wind_cols = [col for col in df.columns if 'wind' in col.lower()]
-            if wind_cols:
-                df['wind_forecast'] = df[wind_cols].sum(axis=1)
+            for col in data.columns:
+                if 'wind' in col.lower():
+                    wind_columns.append(col)
+                    if isinstance(data[col], pd.Series):
+                        wind_total = wind_total + data[col] if isinstance(wind_total, pd.Series) else data[col]
+                    
+            if isinstance(wind_total, pd.Series) and len(wind_total) > 0:
+                result_df['wind_forecast'] = wind_total
+                logger.info(f"风电数据来源: {wind_columns}")
             else:
-                df['wind_forecast'] = 0
+                result_df['wind_forecast'] = 0
+                logger.warning("未找到风电数据，填充为0")
             
-            # 如果没有光伏数据,填充为0
-            if 'solar_forecast' not in df.columns:
-                df['solar_forecast'] = 0
+            # 提取光伏数据
+            if 'Solar' in data.columns:
+                result_df['solar_forecast'] = data['Solar']
+            elif 'solar' in [c.lower() for c in data.columns]:
+                # 查找小写solar列
+                solar_col = [c for c in data.columns if 'solar' in c.lower()][0]
+                result_df['solar_forecast'] = data[solar_col]
+            else:
+                result_df['solar_forecast'] = 0
+                logger.warning("未找到光伏数据，填充为0")
             
-            # 重置索引
-            df = df.reset_index().rename(columns={'index': 'timestamp'})
-            df = df[['timestamp', 'wind_forecast', 'solar_forecast']]
+            # 重置索引并选择需要的列
+            result_df = result_df.reset_index().rename(columns={'index': 'timestamp'})
+            result_df = result_df[['timestamp', 'wind_forecast', 'solar_forecast']]
             
-            logger.info(f"成功获取 {len(df)} 条风光预测数据")
-            return df
+            logger.info(f"成功获取 {len(result_df)} 条风光预测数据")
+            logger.info(f"  风电范围: {result_df['wind_forecast'].min():.1f} - {result_df['wind_forecast'].max():.1f} MW")
+            logger.info(f"  光伏范围: {result_df['solar_forecast'].min():.1f} - {result_df['solar_forecast'].max():.1f} MW")
+            return result_df
             
         except Exception as e:
             logger.error(f"获取风光预测失败: {e}")

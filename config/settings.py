@@ -34,7 +34,7 @@ TRAINING_WINDOW_MONTHS = 18
 VALIDATION_WINDOW_MONTHS = 3
 
 # 特征组配置
-FEATURE_GROUP_VERSION = 1
+FEATURE_GROUP_VERSION = 4  # 提升版本号以创建新 Feature Group，使用 float 类型字段
 ELECTRICITY_FG_NAME = "electricity_market"
 WEATHER_FG_NAME = "weather"
 

@@ -74,19 +74,26 @@ class FeatureStoreManager:
     def create_electricity_feature_group(self, df: pd.DataFrame) -> None:
         """创建或获取电力市场特征组 (极简版)"""
         logger.info(f"\n🔄 Creating/updating Feature Group: {ELECTRICITY_FG_NAME}")
-        
+        # Ensure numeric columns are float to create FG with float types
+        try:
+            for col in ['price', 'load_forecast', 'wind_forecast', 'solar_forecast']:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce').astype('float64')
+        except Exception as e:
+            logger.warning(f"Failed to cast electricity numeric columns to float: {e}")
+
         # 完全参考示例代码语法
         electricity_fg = self.fs.get_or_create_feature_group(
             name=ELECTRICITY_FG_NAME,
             version=FEATURE_GROUP_VERSION,
-            description="电力市场数据: 日前价格、负载预测、风光发电预测",
+            description="Electricity market data: day-ahead price, load forecast, wind and solar forecast",
             primary_key=['timestamp'],
             event_time="timestamp"
         )
-        
+
         logger.info(f"✅ Feature Group '{electricity_fg.name}' ready")
         logger.info(f"📤 Inserting {len(df)} rows of electricity data...")
-        
+
         # 插入数据
         electricity_fg.insert(df, wait=True)
         logger.info("✅ Electricity data inserted successfully!")
@@ -115,14 +122,22 @@ class FeatureStoreManager:
         weather_fg = self.fs.get_or_create_feature_group(
             name=WEATHER_FG_NAME,
             version=FEATURE_GROUP_VERSION,
-            description="SE3区域加权平均天气数据: 温度、风速、太阳辐照度",
+            description="SE3 region weighted average weather data: temperature, wind speed, solar irradiance",
             primary_key=['timestamp'],
             event_time="timestamp"
         )
         
         logger.info(f"✅ Feature Group '{weather_fg.name}' ready")
         logger.info(f"📤 Inserting {len(df)} rows of weather data...")
-        
+
+        # Ensure numeric weather columns are float so the new FG version uses float types
+        try:
+            for col in ['temperature_avg', 'wind_speed_10m_avg', 'wind_speed_80m_avg', 'irradiance_avg']:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce').astype('float64')
+        except Exception as e:
+            logger.warning(f"Failed to cast weather numeric columns to float: {e}")
+
         # 插入数据
         weather_fg.insert(df, wait=True)
         logger.info("✅ Weather data inserted successfully!")

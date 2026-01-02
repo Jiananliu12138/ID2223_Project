@@ -8,7 +8,12 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pandas as pd
 from pathlib import Path
 from features.feature_groups import FeatureStoreManager, LOCAL_DATA_DIR
+from config.settings import ELECTRICITY_FG_NAME, WEATHER_FG_NAME
 import logging
+
+# 如果旧表已存在导致冲突，可以修改这里临时使用新版本号
+# 修改后，重新上传时会创建新版本的 FG
+OVERRIDE_FG_VERSION = 3  # 如果需要，改为更大的数字
 
 logging.basicConfig(
     level=logging.INFO,

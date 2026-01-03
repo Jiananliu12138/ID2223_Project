@@ -34,24 +34,36 @@ def run_inference():
         logger.info("步骤 1/6: 连接Feature Store...")
         fsm = FeatureStoreManager()
         
-        # 2. 读取最新特征数据
-        logger.info("步骤 2/6: 读取特征数据...")
+        # 2. 从 Feature Groups 读取原始数据
+        logger.info("步骤 2/6: 从 Feature Groups 读取原始数据...")
         
-        # 获取未来24小时的数据(假设特征已经通过daily pipeline更新)
+        # 获取包含历史数据的时间范围（需要历史数据来计算滞后特征）
         now = datetime.now(TIMEZONE)
-        start_time = now
-        end_time = now + timedelta(hours=48)  # 获取稍多一些以确保覆盖
+        # 获取过去7天到未来2天的数据（确保有足够的历史数据计算滞后特征）
+        start_time = now - timedelta(days=7)
+        end_time = now + timedelta(days=2)
         
-        df = fsm.read_feature_data(
+        logger.info(f"  时间范围: {start_time.strftime('%Y-%m-%d')} 到 {end_time.strftime('%Y-%m-%d')}")
+        
+        # 从原始 Feature Groups 读取数据
+        df = fsm.read_raw_feature_groups(
             start_time=start_time.strftime('%Y-%m-%d %H:%M:%S'),
             end_time=end_time.strftime('%Y-%m-%d %H:%M:%S')
         )
         
-        logger.info(f"  读取了 {len(df)} 条记录")
+        logger.info(f"  ✅ 读取了 {len(df)} 条原始记录")
         
         # 3. 特征工程
         logger.info("步骤 3/6: 特征工程...")
+        logger.info(f"  原始特征数: {len(df.columns)}")
+        
         df = FeatureEngineer.engineer_features_pipeline(df, include_lag=True)
+        
+        logger.info(f"  工程特征数: {len(df.columns)}")
+        
+        # 只保留未来的数据（用于预测）
+        df = df[df['timestamp'] >= now].copy()
+        logger.info(f"  ✅ 未来数据: {len(df)} 条（用于预测）")
         
         # 4. 加载模型
         logger.info("步骤 4/6: 加载模型...")
@@ -69,19 +81,43 @@ def run_inference():
         model = ElectricityPriceModel()
         model.load_model(model_path)
         
-        # 5. 预测
-        logger.info("步骤 5/6: 执行预测...")
+        # 5. 数据清理和预测
+        logger.info("步骤 5/6: 数据清理和执行预测...")
         
-        # 准备预测数据
+        # 保存 timestamp 用于结果
+        timestamps = df['timestamp'].copy()
+        
+        # 移除非数值列
+        exclude_cols = ['timestamp']
+        cols_to_drop = [col for col in df.columns if col in exclude_cols or df[col].dtype == 'object']
+        
+        if cols_to_drop:
+            logger.info(f"  移除列: {cols_to_drop}")
+            df_clean = df.drop(columns=cols_to_drop)
+        else:
+            df_clean = df.copy()
+        
+        # 准备预测数据（确保特征顺序与训练时一致）
         feature_cols = model.feature_names
-        X_pred = df[feature_cols].fillna(0)
+        
+        # 检查缺失的特征
+        missing_features = set(feature_cols) - set(df_clean.columns)
+        if missing_features:
+            logger.warning(f"  ⚠️  缺失特征: {missing_features}")
+            logger.warning("  将用0填充缺失特征")
+            for feat in missing_features:
+                df_clean[feat] = 0
+        
+        X_pred = df_clean[feature_cols].fillna(0)
+        logger.info(f"  ✅ 预测特征: {len(feature_cols)} 个")
         
         # 执行预测
         predictions = model.predict(X_pred)
+        logger.info(f"  ✅ 完成 {len(predictions)} 个预测")
         
         # 创建预测结果DataFrame
         results_df = pd.DataFrame({
-            'timestamp': df['timestamp'],
+            'timestamp': timestamps,
             'predicted_price': predictions
         })
         

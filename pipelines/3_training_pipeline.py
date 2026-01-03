@@ -159,29 +159,29 @@ def train_model():
         # 保存到Hopsworks Model Registry
         mr = fsm.get_model_registry()
         
-        # 创建模型元数据
+        # 创建模型元数据（只包含数值）
         model_metrics = {
-            'train_mae': train_metrics['MAE'],
-            'train_rmse': train_metrics['RMSE'],
-            'train_r2': train_metrics['R2'],
-            'val_mae': val_metrics['MAE'],
-            'val_rmse': val_metrics['RMSE'],
-            'val_r2': val_metrics['R2'],
-            'test_mae': test_metrics['MAE'],
-            'test_rmse': test_metrics['RMSE'],
-            'test_r2': test_metrics['R2'],
-            'training_date': datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S'),
-            'training_samples': len(X_train),
-            'feature_count': len(X.columns)
+            'train_mae': float(train_metrics['MAE']),
+            'train_rmse': float(train_metrics['RMSE']),
+            'train_r2': float(train_metrics['R2']),
+            'val_mae': float(val_metrics['MAE']),
+            'val_rmse': float(val_metrics['RMSE']),
+            'val_r2': float(val_metrics['R2']),
+            'test_mae': float(test_metrics['MAE']),
+            'test_rmse': float(test_metrics['RMSE']),
+            'test_r2': float(test_metrics['R2']),
+            'training_samples': int(len(X_train)),
+            'feature_count': int(len(X_train.columns))
         }
         
         # 注册模型
         model_dir = "models"
+        training_date = datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')
         
         electricity_model = mr.python.create_model(
             name=MODEL_NAME,
             metrics=model_metrics,
-            description=f"XGBoost电力价格预测模型 - 训练于 {datetime.now().strftime('%Y-%m-%d')}",
+            description=f"XGBoost电力价格预测模型 | 训练时间: {training_date} | 测试MAE: {test_metrics['MAE']:.2f} EUR/MWh",
             input_example=X_test.iloc[:5].to_numpy()
         )
         

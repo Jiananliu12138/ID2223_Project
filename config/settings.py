@@ -30,13 +30,15 @@ SE3_LOCATIONS = [
 
 # 数据配置
 BACKFILL_START_DATE = "2024-01-01"
-TRAINING_WINDOW_MONTHS = 18
+TRAINING_WINDOW_MONTHS = 6
 VALIDATION_WINDOW_MONTHS = 3
 
 # 特征组配置
 FEATURE_GROUP_VERSION = 4  # 提升版本号以创建新 Feature Group，使用 float 类型字段
 ELECTRICITY_FG_NAME = "electricity_market"
 WEATHER_FG_NAME = "weather"
+ENGINEERED_FG_NAME = "electricity_features_engineered"  # 工程特征 Feature Group
+ENGINEERED_FG_VERSION = 1
 
 # 模型配置
 MODEL_NAME = "se3_price_predictor"

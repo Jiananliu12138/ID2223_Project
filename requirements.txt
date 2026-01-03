@@ -1,13 +1,24 @@
-entsoe-py
-hopsworks
+# Data Sources
+entsoe-py==0.5.10
 requests
+
+# ML & Data Processing
+pandas>=2.0.0,<2.2.0  # 兼容 entsoe-py 0.5.10
+numpy<2.0.0
 scikit-learn
 xgboost
 lightgbm
+
+# Feature Store & Model Registry (匹配 Hopsworks 后端 4.2.2)
+hopsworks==4.2.*
+
+# Monitoring & Visualization
 matplotlib
 seaborn
 plotly
 streamlit
+
+# Utilities
 python-dotenv
 pytz
 tenacity

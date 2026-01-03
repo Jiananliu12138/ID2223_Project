@@ -25,20 +25,20 @@ logger = logging.getLogger(__name__)
 
 
 def train_model():
-    """主训练流程"""
+    """主训练流程 - 完整 MLOps 工作流"""
     logger.info(f"\n{'='*70}")
     logger.info(f"模型训练管道 - {datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"{'='*70}\n")
     
     try:
         # 1. 连接Feature Store
-        logger.info("步骤 1/8: 连接Feature Store...")
+        logger.info("步骤 1/9: 连接Feature Store...")
         fsm = FeatureStoreManager()
         
-        # 2. 读取特征数据
-        logger.info("步骤 2/8: 读取特征数据...")
+        # 2. 读取原始特征数据
+        logger.info("步骤 2/9: 读取原始特征数据...")
         
-        # 计算时间范围(最近18个月)
+        # 计算时间范围(最近训练窗口个月)
         end_date = datetime.now(TIMEZONE)
         start_date = end_date - timedelta(days=TRAINING_WINDOW_MONTHS * 30)
         
@@ -49,56 +49,73 @@ def train_model():
             end_time=end_date.strftime('%Y-%m-%d %H:%M:%S')
         )
         
-        logger.info(f"  读取了 {len(df)} 条记录")
+        logger.info(f"  读取了 {len(df)} 条原始记录")
         
         # 3. 特征工程
-        logger.info("步骤 3/8: 特征工程...")
-        df = FeatureEngineer.engineer_features_pipeline(df, include_lag=True)
+        logger.info("步骤 3/9: 特征工程...")
+        logger.info(f"  原始特征数: {len(df.columns)}")
         
-        # 4. 准备训练数据
-        logger.info("步骤 4/8: 准备训练数据...")
-        X, y = prepare_training_data(df, target_col='price')
+        df_engineered = FeatureEngineer.engineer_features_pipeline(df, include_lag=True)
         
-        # 5. 数据分割
-        logger.info("步骤 5/8: 分割训练/验证/测试集...")
+        logger.info(f"  工程特征数: {len(df_engineered.columns)}")
+        logger.info(f"  新增特征: {len(df_engineered.columns) - len(df.columns)} 个")
         
-        # 时间序列分割(不能随机打乱)
-        train_size = int(len(X) * 0.7)
-        val_size = int(len(X) * 0.15)
+        # 4. 保存工程特征到新的 Feature Group
+        logger.info("步骤 4/9: 保存工程特征到 Feature Store...")
+        fsm.create_engineered_feature_group(df_engineered)
         
-        X_train = X.iloc[:train_size]
-        y_train = y.iloc[:train_size]
+        # 5. 创建/获取 Feature View
+        logger.info("步骤 5/9: 创建/获取工程特征视图...")
+        feature_view = fsm.get_engineered_feature_view()
         
-        X_val = X.iloc[train_size:train_size+val_size]
-        y_val = y.iloc[train_size:train_size+val_size]
+        # 6. 从 Feature View 读取训练和测试数据
+        logger.info("步骤 6/9: 从 Feature View 读取训练和测试数据...")
         
-        X_test = X.iloc[train_size+val_size:]
-        y_test = y.iloc[train_size+val_size:]
+        # 计算测试集起始时间（最近20%的数据作为测试集）
+        total_days = (end_date - start_date).days
+        test_days = int(total_days * 0.2)
+        test_start = end_date - timedelta(days=test_days)
         
-        logger.info(f"  训练集: {len(X_train)} 样本")
-        logger.info(f"  验证集: {len(X_val)} 样本")
-        logger.info(f"  测试集: {len(X_test)} 样本")
+        logger.info(f"  训练数据: {start_date.strftime('%Y-%m-%d')} 到 {test_start.strftime('%Y-%m-%d')}")
+        logger.info(f"  测试数据: {test_start.strftime('%Y-%m-%d')} 到 {end_date.strftime('%Y-%m-%d')}")
         
-        # 6. 训练模型
-        logger.info("步骤 6/8: 训练模型...")
+        # 使用 Feature View 的 train_test_split
+        X_train, X_test, y_train, y_test = feature_view.train_test_split(
+            test_start=test_start.strftime('%Y-%m-%d %H:%M:%S')
+        )
+        
+        logger.info(f"  ✅ 训练集: {len(X_train)} 样本, {len(X_train.columns)} 特征")
+        logger.info(f"  ✅ 测试集: {len(X_test)} 样本")
+        
+        # 从训练集中分出验证集
+        train_val_split = int(len(X_train) * 0.85)  # 85%训练，15%验证
+        X_val = X_train.iloc[train_val_split:]
+        y_val = y_train.iloc[train_val_split:]
+        X_train = X_train.iloc[:train_val_split]
+        y_train = y_train.iloc[:train_val_split]
+        
+        logger.info(f"  ✅ 验证集: {len(X_val)} 样本（从训练集分出）")
+        
+        # 7. 训练模型
+        logger.info("步骤 7/9: 训练模型...")
         
         model = ElectricityPriceModel(model_type='xgboost')
         model.train(X_train, y_train, X_val, y_val)
         
-        # 7. 评估模型
-        logger.info("步骤 7/8: 评估模型...")
+        # 8. 评估模型
+        logger.info("步骤 8/9: 评估模型...")
         
         train_metrics = model.evaluate(X_train, y_train)
         val_metrics = model.evaluate(X_val, y_val)
         test_metrics = model.evaluate(X_test, y_test)
         
-        logger.info("\n性能汇总:")
+        logger.info("\n📊 性能汇总:")
         logger.info(f"  训练集 MAE: {train_metrics['MAE']:.2f} EUR/MWh")
         logger.info(f"  验证集 MAE: {val_metrics['MAE']:.2f} EUR/MWh")
         logger.info(f"  测试集 MAE: {test_metrics['MAE']:.2f} EUR/MWh")
         
-        # 8. 保存到Model Registry
-        logger.info("步骤 8/8: 保存模型到Hopsworks...")
+        # 9. 保存到Model Registry
+        logger.info("步骤 9/9: 保存模型到Hopsworks...")
         
         # 本地保存
         model_path = f"models/{MODEL_NAME}.pkl"

@@ -181,7 +181,7 @@ def train_model():
         electricity_model = mr.python.create_model(
             name=MODEL_NAME,
             metrics=model_metrics,
-            description=f"XGBoost电力价格预测模型 | 训练时间: {training_date} | 测试MAE: {test_metrics['MAE']:.2f} EUR/MWh",
+            description=f"XGBoost electricity price prediction model | Trained: {training_date} | Test MAE: {test_metrics['MAE']:.2f} EUR/MWh | Features: {len(X_train.columns)}",
             input_example=X_test.iloc[:5].to_numpy()
         )
         

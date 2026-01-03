@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 def train_model():
-    """主训练流程 - 完整 MLOps 工作流"""
+    """主训练流程 - 完整 MLOps 工作流（11个步骤）"""
     logger.info(f"\n{'='*70}")
     logger.info(f"模型训练管道 - {datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"{'='*70}\n")
@@ -111,6 +111,21 @@ def train_model():
         
         logger.info(f"  ✅ 验证集: {len(X_val)} 样本（从训练集分出）")
         
+        # 7.5. 数据清理（移除非数值列）
+        logger.info("步骤 7.5/10: 数据清理...")
+        
+        # 移除 timestamp 列和其他非数值列
+        exclude_cols = ['timestamp']
+        cols_to_drop = [col for col in X_train.columns if col in exclude_cols or X_train[col].dtype == 'object']
+        
+        if cols_to_drop:
+            logger.info(f"  移除列: {cols_to_drop}")
+            X_train = X_train.drop(columns=cols_to_drop)
+            X_val = X_val.drop(columns=cols_to_drop)
+            X_test = X_test.drop(columns=cols_to_drop)
+        
+        logger.info(f"  ✅ 清理后特征数: {len(X_train.columns)}")
+        
         # 8. 训练模型
         logger.info("步骤 8/10: 训练模型...")
         
@@ -118,7 +133,7 @@ def train_model():
         model.train(X_train, y_train, X_val, y_val)
         
         # 9. 评估模型
-        logger.info("步骤 9/10: 评估模型...")
+        logger.info("步骤 9/11: 评估模型...")
         
         train_metrics = model.evaluate(X_train, y_train)
         val_metrics = model.evaluate(X_val, y_val)
@@ -129,13 +144,17 @@ def train_model():
         logger.info(f"  验证集 MAE: {val_metrics['MAE']:.2f} EUR/MWh")
         logger.info(f"  测试集 MAE: {test_metrics['MAE']:.2f} EUR/MWh")
         
-        # 10. 保存到Model Registry
-        logger.info("步骤 10/10: 保存模型到Hopsworks...")
+        # 10. 保存到本地
+        logger.info("步骤 10/11: 保存模型到本地...")
         
         # 本地保存
         model_path = f"models/{MODEL_NAME}.pkl"
         os.makedirs("models", exist_ok=True)
         model.save_model(model_path)
+        logger.info(f"  ✅ 本地模型: {model_path}")
+        
+        # 11. 保存到Model Registry
+        logger.info("步骤 11/11: 保存模型到Hopsworks Model Registry...")
         
         # 保存到Hopsworks Model Registry
         mr = fsm.get_model_registry()

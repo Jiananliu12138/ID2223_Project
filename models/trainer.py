@@ -5,7 +5,6 @@ import pandas as pd
 import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import xgboost as xgb
-from xgboost.callback import EarlyStopping
 import lightgbm as lgb
 from typing import Tuple, Dict
 import logging
@@ -98,15 +97,17 @@ class ElectricityPriceModel:
         
         # 训练模型
         if self.model_type == 'xgboost':
+            # 如果有验证集，添加 early stopping 参数
+            if X_val is not None:
+                model_params['early_stopping_rounds'] = 50
+            
             self.model = xgb.XGBRegressor(**model_params)
             
             if X_val is not None:
                 eval_set = [(X_train, y_train), (X_val, y_val)]
-                # XGBoost 2.0+ 使用回调函数代替 early_stopping_rounds
                 self.model.fit(
                     X_train, y_train,
                     eval_set=eval_set,
-                    callbacks=[EarlyStopping(rounds=50, save_best=True)],
                     verbose=False
                 )
             else:

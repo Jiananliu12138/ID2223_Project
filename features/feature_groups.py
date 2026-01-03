@@ -187,22 +187,49 @@ class FeatureStoreManager:
         try:
             # 尝试获取现有特征视图
             fv = self.fs.get_feature_view(name=name, version=version)
-            logger.info(f"获取现有特征视图: {name} v{version}")
+            logger.info(f"✅ 获取现有特征视图: {name} v{version}")
             return fv
-        except:
-            logger.info(f"Creating new feature view: {name}")
-            fg1 = self.fs.get_feature_group(ELECTRICITY_FG_NAME, FEATURE_GROUP_VERSION)
-            fg2 = self.fs.get_feature_group(WEATHER_FG_NAME, FEATURE_GROUP_VERSION)
-            query = fg1.select_all().join(fg2.select_all(), on=['timestamp'])
-            return self.fs.create_feature_view(
-                name=name,
-                version=version,
-                labels=['price'],
-                query=query
-            )
+        except Exception as e:
+            logger.info(f"🆕 Feature View 不存在，尝试创建: {name}")
             
-            logger.info(f"特征视图 {name} 创建成功")
-            return fv
+            try:
+                # 获取 Feature Groups
+                logger.info(f"  获取 Feature Group: {ELECTRICITY_FG_NAME} v{FEATURE_GROUP_VERSION}")
+                fg1 = self.fs.get_feature_group(ELECTRICITY_FG_NAME, FEATURE_GROUP_VERSION)
+                
+                logger.info(f"  获取 Feature Group: {WEATHER_FG_NAME} v{FEATURE_GROUP_VERSION}")
+                fg2 = self.fs.get_feature_group(WEATHER_FG_NAME, FEATURE_GROUP_VERSION)
+                
+                if fg1 is None or fg2 is None:
+                    raise ValueError(f"Feature Groups 不存在！请先上传数据。")
+                
+                # 创建联合查询
+                logger.info("  创建联合查询...")
+                query = fg1.select_all().join(fg2.select_all(), on=['timestamp'])
+                
+                # 创建 Feature View
+                logger.info(f"  创建 Feature View: {name}")
+                fv = self.fs.create_feature_view(
+                    name=name,
+                    version=version,
+                    labels=['price'],
+                    query=query
+                )
+                
+                logger.info(f"✅ Feature View {name} 创建成功")
+                return fv
+                
+            except Exception as create_error:
+                logger.error(f"\n{'='*70}")
+                logger.error(f"❌ 创建 Feature View 失败！")
+                logger.error(f"错误信息: {create_error}")
+                logger.error(f"{'='*70}")
+                logger.error(f"\n⚠️  请先确保数据已上传到 Hopsworks：")
+                logger.error(f"  1. 检查本地数据: ls data/local_features/")
+                logger.error(f"  2. 上传数据: python pipelines/upload_to_hopsworks.py")
+                logger.error(f"  3. 如果没有本地数据，先运行: python pipelines/1_backfill_features.py")
+                logger.error(f"\n{'='*70}\n")
+                raise RuntimeError(f"无法创建 Feature View，原因: {create_error}")
     
     def get_engineered_feature_view(self, name: str = "electricity_engineered_fv", version: int = 1):
         """

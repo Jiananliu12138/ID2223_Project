@@ -271,11 +271,68 @@ class FeatureStoreManager:
             logger.info(f"✅ 工程特征视图 {name} 创建成功")
             return fv
     
+    def read_raw_feature_groups(self, 
+                                 start_time: str = None,
+                                 end_time: str = None) -> pd.DataFrame:
+        """
+        直接从 Feature Groups 读取原始数据并合并
+        
+        Args:
+            start_time: 开始时间 'YYYY-MM-DD HH:MM:SS'
+            end_time: 结束时间 'YYYY-MM-DD HH:MM:SS'
+            
+        Returns:
+            合并后的 DataFrame（electricity + weather）
+        """
+        logger.info("📖 从 Feature Groups 读取原始数据...")
+        
+        # 1. 获取 Feature Groups
+        logger.info(f"  获取 Feature Group: {ELECTRICITY_FG_NAME} v{FEATURE_GROUP_VERSION}")
+        electricity_fg = self.fs.get_feature_group(ELECTRICITY_FG_NAME, FEATURE_GROUP_VERSION)
+        
+        logger.info(f"  获取 Feature Group: {WEATHER_FG_NAME} v{FEATURE_GROUP_VERSION}")
+        weather_fg = self.fs.get_feature_group(WEATHER_FG_NAME, FEATURE_GROUP_VERSION)
+        
+        # 2. 读取数据
+        if start_time and end_time:
+            logger.info(f"  时间范围: {start_time} 到 {end_time}")
+            # 使用 read() 读取所有数据，然后在 pandas 中过滤（更可靠）
+            electricity_df = electricity_fg.read()
+            weather_df = weather_fg.read()
+            
+            # 在 pandas 中过滤时间范围
+            electricity_df['timestamp'] = pd.to_datetime(electricity_df['timestamp'])
+            weather_df['timestamp'] = pd.to_datetime(weather_df['timestamp'])
+            
+            electricity_df = electricity_df[
+                (electricity_df['timestamp'] >= start_time) & 
+                (electricity_df['timestamp'] <= end_time)
+            ]
+            weather_df = weather_df[
+                (weather_df['timestamp'] >= start_time) & 
+                (weather_df['timestamp'] <= end_time)
+            ]
+        else:
+            logger.info("  读取所有数据")
+            electricity_df = electricity_fg.read()
+            weather_df = weather_fg.read()
+        
+        logger.info(f"  ✅ 电力数据: {len(electricity_df)} 行")
+        logger.info(f"  ✅ 天气数据: {len(weather_df)} 行")
+        
+        # 3. 合并数据
+        logger.info("  合并电力和天气数据...")
+        df = pd.merge(electricity_df, weather_df, on='timestamp', how='inner')
+        
+        logger.info(f"  ✅ 合并后: {len(df)} 行, {len(df.columns)} 列")
+        
+        return df
+    
     def read_feature_data(self, 
                          start_time: str = None,
                          end_time: str = None) -> pd.DataFrame:
         """
-        从特征视图读取数据
+        从特征视图读取数据（用于已有 Feature View 的情况）
         
         Args:
             start_time: 开始时间 'YYYY-MM-DD HH:MM:SS'

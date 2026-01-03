@@ -35,8 +35,8 @@ def train_model():
         logger.info("步骤 1/9: 连接Feature Store...")
         fsm = FeatureStoreManager()
         
-        # 2. 读取原始特征数据
-        logger.info("步骤 2/9: 读取原始特征数据...")
+        # 2. 从 Feature Groups 读取原始数据
+        logger.info("步骤 2/9: 从 Feature Groups 读取原始数据...")
         
         # 计算时间范围(最近训练窗口个月)
         end_date = datetime.now(TIMEZONE)
@@ -44,12 +44,13 @@ def train_model():
         
         logger.info(f"  数据范围: {start_date.strftime('%Y-%m-%d')} 到 {end_date.strftime('%Y-%m-%d')}")
         
-        df = fsm.read_feature_data(
+        # 直接从 Feature Groups 读取并合并数据
+        df = fsm.read_raw_feature_groups(
             start_time=start_date.strftime('%Y-%m-%d %H:%M:%S'),
             end_time=end_date.strftime('%Y-%m-%d %H:%M:%S')
         )
         
-        logger.info(f"  读取了 {len(df)} 条原始记录")
+        logger.info(f"  ✅ 读取了 {len(df)} 条原始记录")
         
         # 3. 特征工程
         logger.info("步骤 3/9: 特征工程...")

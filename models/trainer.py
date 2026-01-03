@@ -161,18 +161,26 @@ class ElectricityPriceModel:
         
         Args:
             X: 特征
-            y: 真实值
+            y: 真实值（可以是 Series 或 DataFrame）
             
         Returns:
             评估指标字典
         """
         y_pred = self.predict(X)
         
+        # 确保 y 是 numpy array（处理 DataFrame 或 Series）
+        if isinstance(y, pd.DataFrame):
+            y_true = y.values.ravel()
+        elif isinstance(y, pd.Series):
+            y_true = y.values
+        else:
+            y_true = np.array(y).ravel()
+        
         metrics = {
-            'MAE': mean_absolute_error(y, y_pred),
-            'RMSE': np.sqrt(mean_squared_error(y, y_pred)),
-            'R2': r2_score(y, y_pred),
-            'MAPE': np.mean(np.abs((y - y_pred) / y)) * 100  # 注意可能除零
+            'MAE': mean_absolute_error(y_true, y_pred),
+            'RMSE': np.sqrt(mean_squared_error(y_true, y_pred)),
+            'R2': r2_score(y_true, y_pred),
+            'MAPE': np.mean(np.abs((y_true - y_pred) / np.maximum(y_true, 1e-8))) * 100  # 避免除零
         }
         
         logger.info("模型评估结果:")

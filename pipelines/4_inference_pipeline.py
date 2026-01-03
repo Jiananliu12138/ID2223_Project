@@ -61,9 +61,24 @@ def run_inference():
         
         logger.info(f"  工程特征数: {len(df.columns)}")
         
-        # 只保留未来的数据（用于预测）
-        df = df[df['timestamp'] >= now].copy()
-        logger.info(f"  ✅ 未来数据: {len(df)} 条（用于预测）")
+        # 检查是否有未来数据
+        future_data = df[df['timestamp'] >= now].copy()
+        
+        if len(future_data) > 0:
+            # 有未来数据，用于真实预测
+            df = future_data
+            prediction_mode = "forecast"
+            logger.info(f"  ✅ 使用未来数据: {len(df)} 条（真实预测模式）")
+        else:
+            # 没有未来数据，使用最新的24小时数据（演示/回测模式）
+            prediction_mode = "backtest"
+            logger.warning("  ⚠️  没有未来数据，切换到演示/回测模式")
+            logger.info("  💡 使用最新的24小时历史数据来展示模型预测能力")
+            logger.info("  💡 若要真实预测，请先运行: python pipelines/2_daily_feature_pipeline.py")
+            
+            # 使用最新的24条记录
+            df = df.tail(24).copy()
+            logger.info(f"  ✅ 使用最新历史数据: {len(df)} 条（演示模式）")
         
         # 4. 加载模型
         logger.info("步骤 4/6: 加载模型...")
@@ -118,16 +133,18 @@ def run_inference():
         # 创建预测结果DataFrame
         results_df = pd.DataFrame({
             'timestamp': timestamps,
-            'predicted_price': predictions
+            'predicted_price': predictions,
+            'mode': prediction_mode  # 添加模式标识
         })
         
         # 如果有实际价格,添加对比
         if 'price' in df.columns:
-            results_df['actual_price'] = df['price']
+            results_df['actual_price'] = df['price'].values
             results_df['error'] = results_df['actual_price'] - results_df['predicted_price']
             results_df['abs_error'] = np.abs(results_df['error'])
         
-        logger.info(f"  预测了 {len(results_df)} 个小时的电价")
+        mode_name = "真实预测" if prediction_mode == "forecast" else "演示/回测"
+        logger.info(f"  ✅ 预测了 {len(results_df)} 个小时的电价（{mode_name}模式）")
         
         # 6. 保存预测结果
         logger.info("步骤 6/6: 保存预测结果...")
@@ -152,23 +169,29 @@ def run_inference():
         with open(latest_file, 'w') as f:
             json.dump(results_json, f, indent=2, default=str)
         
-        logger.info(f"  预测结果已保存到: {output_file}")
+        logger.info(f"  ✅ 预测结果已保存到: {output_file}")
+        logger.info(f"  ✅ 最新预测: {latest_file}")
         
         # 打印统计信息
-        logger.info("\n预测统计:")
+        logger.info(f"\n{'='*70}")
+        logger.info(f"📊 预测统计 ({mode_name}模式)")
+        logger.info(f"{'='*70}")
+        logger.info(f"  预测模式: {mode_name}")
+        logger.info(f"  预测时段: {len(results_df)} 小时")
+        logger.info(f"  时间范围: {results_df['timestamp'].min()} 到 {results_df['timestamp'].max()}")
         logger.info(f"  平均预测价格: {results_df['predicted_price'].mean():.2f} EUR/MWh")
         logger.info(f"  最低预测价格: {results_df['predicted_price'].min():.2f} EUR/MWh")
         logger.info(f"  最高预测价格: {results_df['predicted_price'].max():.2f} EUR/MWh")
         
         if 'actual_price' in results_df.columns:
             mae = results_df['abs_error'].mean()
-            logger.info(f"  MAE: {mae:.2f} EUR/MWh")
+            logger.info(f"  ✅ MAE（与实际价格对比）: {mae:.2f} EUR/MWh")
         
         # 找到最便宜的4小时时段(用于"洗衣计时器")
+        logger.info(f"\n💡 最便宜的4小时（推荐用电时段）:")
         cheapest_hours = results_df.nsmallest(4, 'predicted_price')
-        logger.info("\n最便宜的4小时:")
         for _, row in cheapest_hours.iterrows():
-            logger.info(f"  {row['timestamp']}: {row['predicted_price']:.2f} EUR/MWh")
+            logger.info(f"  🕐 {row['timestamp']}: {row['predicted_price']:.2f} EUR/MWh")
         
         logger.info(f"\n{'='*70}")
         logger.info("✅ 推理完成!")

@@ -61,16 +61,30 @@ def train_model():
         logger.info(f"  工程特征数: {len(df_engineered.columns)}")
         logger.info(f"  新增特征: {len(df_engineered.columns) - len(df.columns)} 个")
         
-        # 4. 保存工程特征到新的 Feature Group
-        logger.info("步骤 4/9: 保存工程特征到 Feature Store...")
+        # 4. 时区标准化处理（保存到 Hopsworks 前）
+        logger.info("步骤 4/9: 时区标准化...")
+        if 'timestamp' in df_engineered.columns:
+            df_engineered['timestamp'] = pd.to_datetime(df_engineered['timestamp'])
+            
+            # 如果是 naive datetime，添加时区
+            if df_engineered['timestamp'].dt.tz is None:
+                df_engineered['timestamp'] = df_engineered['timestamp'].dt.tz_localize(TIMEZONE)
+                logger.info(f"  已将时区设置为 {TIMEZONE}")
+            else:
+                # 如果已有时区，统一转换为配置的时区
+                df_engineered['timestamp'] = df_engineered['timestamp'].dt.tz_convert(TIMEZONE)
+                logger.info(f"  已将时区转换为 {TIMEZONE}")
+        
+        # 5. 保存工程特征到新的 Feature Group
+        logger.info("步骤 5/9: 保存工程特征到 Feature Store...")
         fsm.create_engineered_feature_group(df_engineered)
         
-        # 5. 创建/获取 Feature View
-        logger.info("步骤 5/9: 创建/获取工程特征视图...")
+        # 6. 创建/获取 Feature View
+        logger.info("步骤 6/10: 创建/获取工程特征视图...")
         feature_view = fsm.get_engineered_feature_view()
         
-        # 6. 从 Feature View 读取训练和测试数据
-        logger.info("步骤 6/9: 从 Feature View 读取训练和测试数据...")
+        # 7. 从 Feature View 读取训练和测试数据
+        logger.info("步骤 7/10: 从 Feature View 读取训练和测试数据...")
         
         # 计算测试集起始时间（最近20%的数据作为测试集）
         total_days = (end_date - start_date).days
@@ -97,14 +111,14 @@ def train_model():
         
         logger.info(f"  ✅ 验证集: {len(X_val)} 样本（从训练集分出）")
         
-        # 7. 训练模型
-        logger.info("步骤 7/9: 训练模型...")
+        # 8. 训练模型
+        logger.info("步骤 8/10: 训练模型...")
         
         model = ElectricityPriceModel(model_type='xgboost')
         model.train(X_train, y_train, X_val, y_val)
         
-        # 8. 评估模型
-        logger.info("步骤 8/9: 评估模型...")
+        # 9. 评估模型
+        logger.info("步骤 9/10: 评估模型...")
         
         train_metrics = model.evaluate(X_train, y_train)
         val_metrics = model.evaluate(X_val, y_val)
@@ -115,8 +129,8 @@ def train_model():
         logger.info(f"  验证集 MAE: {val_metrics['MAE']:.2f} EUR/MWh")
         logger.info(f"  测试集 MAE: {test_metrics['MAE']:.2f} EUR/MWh")
         
-        # 9. 保存到Model Registry
-        logger.info("步骤 9/9: 保存模型到Hopsworks...")
+        # 10. 保存到Model Registry
+        logger.info("步骤 10/10: 保存模型到Hopsworks...")
         
         # 本地保存
         model_path = f"models/{MODEL_NAME}.pkl"

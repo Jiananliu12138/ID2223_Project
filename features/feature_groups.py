@@ -145,32 +145,23 @@ class FeatureStoreManager:
         logger.info("✅ Weather data inserted successfully!")
 
     def create_engineered_feature_group(self, df: pd.DataFrame) -> None:
-        """
-        创建或获取工程特征组（包含所有特征工程后的特征）
+        """创建或获取工程特征组 (极简版)"""
+        logger.info(f"\n🔄 Creating/updating Feature Group: {ENGINEERED_FG_NAME}")
         
-        Args:
-            df: 经过特征工程处理的DataFrame，包含所有原始特征+工程特征
-        """
-        logger.info(f"\n🔄 Creating/updating Engineered Feature Group: {ENGINEERED_FG_NAME}")
+        # Ensure all numeric columns are float64 type
+        try:
+            numeric_cols = df.select_dtypes(include=['int64', 'float64', 'int32', 'float32']).columns
+            for col in numeric_cols:
+                if col != 'timestamp':  # Skip timestamp
+                    df[col] = pd.to_numeric(df[col], errors='coerce').astype('float64')
+        except Exception as e:
+            logger.warning(f"Failed to cast numeric columns to float: {e}")
         
-        # 确保时间戳列存在
-        if 'timestamp' not in df.columns:
-            raise ValueError("DataFrame must contain 'timestamp' column")
-        
-        # 确保所有数值列都是 float64 类型
-        numeric_cols = df.select_dtypes(include=['int64', 'float64', 'int32', 'float32']).columns
-        for col in numeric_cols:
-            if col != 'timestamp':  # 跳过时间戳
-                df[col] = pd.to_numeric(df[col], errors='coerce').astype('float64')
-        
-        logger.info(f"  特征数量: {len(df.columns)}")
-        logger.info(f"  数据行数: {len(df)}")
-        
-        # 创建或获取 Feature Group
+        # 完全参考示例代码语法
         engineered_fg = self.fs.get_or_create_feature_group(
             name=ENGINEERED_FG_NAME,
             version=ENGINEERED_FG_VERSION,
-            description="完整特征工程后的电力价格预测特征集，包含时间特征、供需特征、滞后特征和交互特征",
+            description="Engineered features for electricity price prediction: time, supply-demand, lag, and interaction features",
             primary_key=['timestamp'],
             event_time="timestamp"
         )
@@ -183,53 +174,33 @@ class FeatureStoreManager:
         logger.info("✅ Engineered features inserted successfully!")
 
     def get_feature_view(self, name: str = "electricity_price_fv", version: int = 1):
-        """获取或创建特征视图（原始特征）"""
-        try:
-            # 尝试获取现有特征视图
-            fv = self.fs.get_feature_view(name=name, version=version)
-            logger.info(f"✅ 获取现有特征视图: {name} v{version}")
-            return fv
-        except Exception as e:
-            logger.info(f"🆕 Feature View 不存在，尝试创建: {name}")
-            
-            try:
-                # 获取 Feature Groups
-                logger.info(f"  获取 Feature Group: {ELECTRICITY_FG_NAME} v{FEATURE_GROUP_VERSION}")
-                fg1 = self.fs.get_feature_group(ELECTRICITY_FG_NAME, FEATURE_GROUP_VERSION)
-                
-                logger.info(f"  获取 Feature Group: {WEATHER_FG_NAME} v{FEATURE_GROUP_VERSION}")
-                fg2 = self.fs.get_feature_group(WEATHER_FG_NAME, FEATURE_GROUP_VERSION)
-                
-                if fg1 is None or fg2 is None:
-                    raise ValueError(f"Feature Groups 不存在！请先上传数据。")
-                
-                # 创建联合查询
-                logger.info("  创建联合查询...")
-                query = fg1.select_all().join(fg2.select_all(), on=['timestamp'])
-                
-                # 创建 Feature View
-                logger.info(f"  创建 Feature View: {name}")
-                fv = self.fs.create_feature_view(
-                    name=name,
-                    version=version,
-                    labels=['price'],
-                    query=query
-                )
-                
-                logger.info(f"✅ Feature View {name} 创建成功")
-                return fv
-                
-            except Exception as create_error:
-                logger.error(f"\n{'='*70}")
-                logger.error(f"❌ 创建 Feature View 失败！")
-                logger.error(f"错误信息: {create_error}")
-                logger.error(f"{'='*70}")
-                logger.error(f"\n⚠️  请先确保数据已上传到 Hopsworks：")
-                logger.error(f"  1. 检查本地数据: ls data/local_features/")
-                logger.error(f"  2. 上传数据: python pipelines/upload_to_hopsworks.py")
-                logger.error(f"  3. 如果没有本地数据，先运行: python pipelines/1_backfill_features.py")
-                logger.error(f"\n{'='*70}\n")
-                raise RuntimeError(f"无法创建 Feature View，原因: {create_error}")
+        """获取或创建特征视图（原始特征：electricity + weather）"""
+        logger.info(f"💾 Creating/Getting Feature View: {name} v{version}")
+        
+        # 获取两个 Feature Groups
+        logger.info(f"  📋 Getting Feature Groups...")
+        electricity_fg = self.fs.get_feature_group(ELECTRICITY_FG_NAME, FEATURE_GROUP_VERSION)
+        weather_fg = self.fs.get_feature_group(WEATHER_FG_NAME, FEATURE_GROUP_VERSION)
+        
+        # 创建联合查询
+        logger.info("  🔍 Creating feature query (join electricity + weather)...")
+        selected_features = electricity_fg.select_all().join(
+            weather_fg.select_all(), 
+            on=['timestamp']
+        )
+        
+        # 使用 get_or_create_feature_view 创建或获取 Feature View
+        logger.info(f"  ✨ Creating Feature View with 'price' as label...")
+        feature_view = self.fs.get_or_create_feature_view(
+            name=name,
+            description="Electricity market and weather features with price as target",
+            version=version,
+            labels=['price'],
+            query=selected_features
+        )
+        
+        logger.info(f"✅ Feature View '{name}' ready!")
+        return feature_view
     
     def get_engineered_feature_view(self, name: str = "electricity_engineered_fv", version: int = 1):
         """
@@ -242,34 +213,31 @@ class FeatureStoreManager:
         Returns:
             Feature View 对象
         """
-        try:
-            # 尝试获取现有特征视图
-            fv = self.fs.get_feature_view(name=name, version=version)
-            logger.info(f"✅ 获取现有工程特征视图: {name} v{version}")
-            return fv
-        except:
-            logger.info(f"🆕 创建新的工程特征视图: {name} v{version}")
-            
-            # 获取工程特征 Feature Group
-            engineered_fg = self.fs.get_feature_group(
-                name=ENGINEERED_FG_NAME, 
-                version=ENGINEERED_FG_VERSION
-            )
-            
-            # 创建查询（选择所有特征）
-            query = engineered_fg.select_all()
-            
-            # 创建 Feature View，price 作为标签
-            fv = self.fs.create_feature_view(
-                name=name,
-                version=version,
-                description="用于电力价格预测的完整工程特征视图",
-                labels=['price'],  # price 是目标变量
-                query=query
-            )
-            
-            logger.info(f"✅ 工程特征视图 {name} 创建成功")
-            return fv
+        logger.info(f"💾 Creating/Getting Feature View: {name} v{version}")
+        
+        # 获取工程特征 Feature Group
+        logger.info(f"  📋 Getting Feature Group: {ENGINEERED_FG_NAME} v{ENGINEERED_FG_VERSION}")
+        engineered_fg = self.fs.get_feature_group(
+            name=ENGINEERED_FG_NAME, 
+            version=ENGINEERED_FG_VERSION
+        )
+        
+        # 创建查询（选择所有特征）
+        logger.info("  🔍 Creating feature query (select all features)...")
+        selected_features = engineered_fg.select_all()
+        
+        # 使用 get_or_create_feature_view 创建或获取 Feature View
+        logger.info(f"  ✨ Creating Feature View with 'price' as label...")
+        feature_view = self.fs.get_or_create_feature_view(
+            name=name,
+            description="Engineered features for electricity price prediction with price as target",
+            version=version,
+            labels=['price'],  # price 是目标变量
+            query=selected_features
+        )
+        
+        logger.info(f"✅ Feature View '{name}' ready!")
+        return feature_view
     
     def read_raw_feature_groups(self, 
                                  start_time: str = None,

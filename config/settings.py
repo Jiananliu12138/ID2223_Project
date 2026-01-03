@@ -38,7 +38,7 @@ FEATURE_GROUP_VERSION = 4  # 提升版本号以创建新 Feature Group，使用 
 ELECTRICITY_FG_NAME = "electricity_market"
 WEATHER_FG_NAME = "weather"
 ENGINEERED_FG_NAME = "electricity_features_engineered"  # 工程特征 Feature Group
-ENGINEERED_FG_VERSION = 1
+ENGINEERED_FG_VERSION = 2  # 增加版本号以避免 Table already exists 错误
 
 # 模型配置
 MODEL_NAME = "se3_price_predictor"

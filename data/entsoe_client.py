@@ -1,5 +1,5 @@
 """
-ENTSO-E数据获取客户端
+ENTSO-E data client
 """
 from entsoe import EntsoePandasClient
 import pandas as pd
@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 
 
 class ENTSOEClient:
-    """ENTSO-E Transparency Platform数据客户端"""
+    """ENTSO-E Transparency Platform data client"""
     
     def __init__(self, api_key: str = None):
         """
-        初始化ENTSO-E客户端
+        Initialize the ENTSO-E client
         
         Args:
-            api_key: ENTSO-E API密钥,如果未提供则从环境变量读取
+            api_key: ENTSO-E API key. If not provided, read from environment/config
         """
         self.api_key = api_key or ENTSOE_API_KEY
         if not self.api_key:
@@ -37,10 +37,10 @@ class ENTSOEClient:
         import requests
         from xml.etree import ElementTree as ET
         
-        # ENTSO-E API 端点
+        # ENTSO-E API endpoint
         url = "https://web-api.tp.entsoe.eu/api"
         
-        # API 参数
+        # API parameters
         params = {
             'securityToken': self.api_key,
             'documentType': 'A44',  # Price document
@@ -54,10 +54,10 @@ class ENTSOEClient:
         response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
         
-        # 解析 XML
+        # Parse XML
         root = ET.fromstring(response.content)
         
-        # 提取时间序列数据
+        # Extract time series data
         ns = {'ns': 'urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3'}
         
         timestamps = []
@@ -65,12 +65,12 @@ class ENTSOEClient:
         
         for timeseries in root.findall('.//ns:TimeSeries', ns):
             for period in timeseries.findall('.//ns:Period', ns):
-                # 获取起始时间
+                # Get period start time
                 start_time_str = period.find('ns:timeInterval/ns:start', ns).text
-                # 解析时间（格式：2026-01-04T23:00Z）
+                # Parse time (format: 2026-01-04T23:00Z)
                 period_start = pd.to_datetime(start_time_str).tz_convert(TIMEZONE)
                 
-                # 获取分辨率（通常是 PT60M = 60分钟）
+                # Get resolution (commonly PT60M = 60 minutes)
                 resolution = period.find('ns:resolution', ns).text
                 if resolution == 'PT60M':
                     freq = pd.Timedelta(hours=1)
@@ -79,18 +79,18 @@ class ENTSOEClient:
                 else:
                     freq = pd.Timedelta(hours=1)
                 
-                # 提取所有数据点
+                # Extract all data points
                 for point in period.findall('ns:Point', ns):
                     position = int(point.find('ns:position', ns).text)
                     price = float(point.find('ns:price.amount', ns).text)
                     
-                    # 计算时间戳
+                    # Compute timestamp
                     timestamp = period_start + (position - 1) * freq
                     
                     timestamps.append(timestamp)
                     prices.append(price)
         
-        # 创建 DataFrame 并去重
+        # Create DataFrame and deduplicate
         df = pd.DataFrame({'timestamp': timestamps, 'price': prices})
         df = df.drop_duplicates(subset=['timestamp'], keep='first').sort_values('timestamp')
         
@@ -100,15 +100,11 @@ class ENTSOEClient:
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
     def fetch_day_ahead_prices(self, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
         """
-<<<<<<< HEAD
-        获取日前市场价格 - 采用分段获取策略以绕过 entsoe-py 内部长度不匹配错误
-=======
-        获取日前市场价格（增强版：优先使用原始 API，避免 entsoe-py 的解析 bug）
->>>>>>> 2534b7408ff3ed0345d9a709cb081f36063fb3df
+        acquire day-ahead electricity prices
         """
         logger.info(f"获取日前价格: {start} 到 {end}")
         
-        # 🔧 优先尝试直接调用 REST API（绕过 entsoe-py bug）
+        # 🔧 Prefer direct REST API call (workaround for entsoe-py bug)
         try:
             df = self._fetch_prices_raw_api(start, end)
             logger.info(f"✅ 成功获取 {len(df)} 条价格数据（使用原始 API）")
@@ -117,56 +113,15 @@ class ENTSOEClient:
             logger.warning(f"⚠️  原始 API 调用失败: {raw_api_error}")
             logger.info(f"  尝试使用 entsoe-py 库...")
         
-        # 备用方案：使用 entsoe-py 库
+        # Fallback: use the entsoe-py library
         try:
-<<<<<<< HEAD
-            logger.info(f"获取日前价格: {start} 到 {end}")
-            
-            # 如果跨度超过1天，采用逐日获取策略
-            all_dfs = []
-            current_start = start
-            
-            while current_start < end:
-                # 每次取 24 小时
-                current_end = min(current_start + pd.Timedelta(days=1), end)
-                
-                try:
-                    prices = self.client.query_day_ahead_prices(
-                        self.bidding_zone, 
-                        start=current_start, 
-                        end=current_end
-                    )
-                    
-                    if isinstance(prices, (pd.Series, pd.DataFrame)):
-                        temp_df = prices.reset_index()
-                        temp_df.columns = ['timestamp', 'price'] if temp_df.shape[1] == 2 else ['timestamp'] + [f'price_{i}' for i in range(temp_df.shape[1]-1)]
-                        if temp_df.shape[1] > 2:
-                            temp_df = temp_df[['timestamp', temp_df.columns[1]]].rename(columns={temp_df.columns[1]: 'price'})
-                        all_dfs.append(temp_df)
-                except Exception as day_e:
-                    logger.warning(f"  ⚠️ 获取时段 {current_start} 数据失败: {day_e}，跳过该时段")
-                
-                current_start = current_end
-
-            if not all_dfs:
-                raise ValueError("未能获取到任何价格数据")
-                
-            # 合并所有片段并去重
-            df = pd.concat(all_dfs, ignore_index=True)
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
-            
-            # 核心步骤：彻底去重并按时间排序
-            df = df.drop_duplicates(subset=['timestamp']).sort_values('timestamp')
-            
-            logger.info(f"成功获取 {len(df)} 条价格数据 (已去重)")
-=======
             prices = self.client.query_day_ahead_prices(
                 self.bidding_zone, 
                 start=start, 
                 end=end
             )
             
-            # 🔍 详细调试信息
+            # 🔍 Detailed debug information
             logger.info(f"  📊 原始数据类型: {type(prices)}")
             
             if isinstance(prices, pd.Series):
@@ -177,11 +132,11 @@ class ENTSOEClient:
                 logger.info(f"  📊 前3个时间戳: {list(prices.index[:3])}")
                 logger.info(f"  📊 后3个时间戳: {list(prices.index[-3:])}")
                 
-                # 检查是否有重复的时间戳
+                # Check for duplicate timestamps
                 duplicates = prices.index.duplicated()
                 if duplicates.any():
                     logger.warning(f"  ⚠️  发现 {duplicates.sum()} 个重复时间戳！")
-                    # 去重：保留第一个
+                    # Deduplicate: keep the first occurrence
                     prices = prices[~duplicates]
                     logger.info(f"  ✅ 去重后长度: {len(prices)}")
             
@@ -197,10 +152,10 @@ class ENTSOEClient:
             logger.error(f"   详细堆栈:\n{traceback.format_exc()}")
             raise
         
-        # 尝试转换为 DataFrame（多种方法）
+        # Try converting to a DataFrame (multiple approaches)
         try:
             if isinstance(prices, pd.Series):
-                # 方法1: to_frame()
+                # Method 1: to_frame()
                 df = prices.to_frame(name='price').reset_index()
                 df.columns = ['timestamp', 'price']
             else:
@@ -213,14 +168,13 @@ class ENTSOEClient:
                     df.columns = ['timestamp', 'price']
             
             logger.info(f"✅ 成功获取 {len(df)} 条价格数据")
->>>>>>> 2534b7408ff3ed0345d9a709cb081f36063fb3df
             return df
             
         except Exception as convert_error:
             logger.error(f"❌ DataFrame 转换失败: {convert_error}")
             logger.error(f"   尝试备用方法...")
             
-            # 🔧 备用方法：手动构造，但先确保长度一致
+            # 🔧 Backup method: manually construct, but ensure lengths align first
             try:
                 if isinstance(prices, pd.Series):
                     timestamps = list(prices.index)
@@ -228,7 +182,7 @@ class ENTSOEClient:
                     
                     logger.info(f"  备用方法: timestamps={len(timestamps)}, values={len(values)}")
                     
-                    # 强制对齐长度
+                    # Force-align lengths
                     min_len = min(len(timestamps), len(values))
                     df = pd.DataFrame({
                         'timestamp': timestamps[:min_len],
@@ -265,14 +219,14 @@ class ENTSOEClient:
         response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
         
-        # 🔍 调试：保存原始 XML
+        # 🔍 Debug: log/save raw XML
         logger.debug(f"  Response status: {response.status_code}")
         logger.debug(f"  Response length: {len(response.content)} bytes")
         
-        # 解析 XML
+        # Parse XML
         root = ET.fromstring(response.content)
         
-        # 🔍 尝试多种可能的命名空间
+        # 🔍 Try multiple possible XML namespaces
         possible_namespaces = [
             {'ns': 'urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0'},  # Generation/Load Document（正确的！）
             {'ns': 'urn:iec62325.351:tc57wg16:451-6:loaddocument:3:0'},
@@ -296,27 +250,27 @@ class ENTSOEClient:
             logger.warning(f"  ⚠️  未找到 TimeSeries，尝试查看 XML 根节点...")
             logger.warning(f"  根节点: {root.tag}")
             logger.warning(f"  子节点: {[child.tag for child in root][:5]}")
-            # 尝试无命名空间
+            # Try without namespace
             timeseries_list = root.findall('.//TimeSeries')
         
         for timeseries in timeseries_list:
-            # 尝试有命名空间和无命名空间两种方式
+            # Try both namespaced and non-namespaced paths
             periods = timeseries.findall('.//ns:Period', used_ns) if used_ns else timeseries.findall('.//Period')
             
             for period in periods:
-                # 获取起始时间
+                # Get start time
                 start_elem = period.find('ns:timeInterval/ns:start', used_ns) if used_ns else period.find('.//start')
                 if start_elem is None:
                     continue
                 start_time_str = start_elem.text
                 period_start = pd.to_datetime(start_time_str).tz_convert(TIMEZONE)
                 
-                # 获取分辨率
+                # Get resolution
                 res_elem = period.find('ns:resolution', used_ns) if used_ns else period.find('.//resolution')
                 resolution = res_elem.text if res_elem is not None else 'PT60M'
                 freq = pd.Timedelta(hours=1) if resolution == 'PT60M' else pd.Timedelta(minutes=15)
                 
-                # 获取数据点
+                # Get data points
                 points = period.findall('ns:Point', used_ns) if used_ns else period.findall('.//Point')
                 for point in points:
                     pos_elem = point.find('ns:position', used_ns) if used_ns else point.find('.//position')
@@ -332,7 +286,7 @@ class ENTSOEClient:
                     timestamps.append(timestamp)
                     loads.append(load)
         
-        # 创建 DataFrame
+        # Create DataFrame
         if not timestamps:
             logger.warning("  ⚠️  原始 API 未返回任何数据，将尝试 entsoe-py 库")
             raise ValueError("No load forecast data from raw API")
@@ -346,15 +300,11 @@ class ENTSOEClient:
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
     def fetch_load_forecast(self, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
         """
-<<<<<<< HEAD
-        获取总负载预测 - 采用分段获取策略
-=======
         获取总负载预测（增强版：优先使用原始 API）
->>>>>>> 2534b7408ff3ed0345d9a709cb081f36063fb3df
         """
         logger.info(f"获取负载预测: {start} 到 {end}")
         
-        # 优先尝试直接调用 REST API
+        # Prefer direct REST API call
         try:
             df = self._fetch_load_raw_api(start, end)
             logger.info(f"✅ 成功获取 {len(df)} 条负载预测数据（使用原始 API）")
@@ -363,46 +313,8 @@ class ENTSOEClient:
             logger.warning(f"⚠️  原始 API 调用失败: {raw_api_error}")
             logger.info(f"  尝试使用 entsoe-py 库...")
         
-        # 备用方案：使用 entsoe-py 库
+        # Fallback: use the entsoe-py library
         try:
-<<<<<<< HEAD
-            logger.info(f"获取负载预测: {start} 到 {end}")
-            
-            all_dfs = []
-            current_start = start
-            
-            while current_start < end:
-                current_end = min(current_start + pd.Timedelta(days=1), end)
-                
-                try:
-                    load = self.client.query_load_forecast(
-                        self.bidding_zone,
-                        start=current_start,
-                        end=current_end
-                    )
-                    
-                    if isinstance(load, pd.DataFrame):
-                        if load.shape[1] > 1:
-                            load = load.mean(axis=1)
-                    
-                    temp_df = load.reset_index()
-                    temp_df.columns = ['timestamp', 'load_forecast']
-                    all_dfs.append(temp_df)
-                except Exception as day_e:
-                    logger.warning(f"  ⚠️ 获取时段 {current_start} 负载失败: {day_e}")
-                
-                current_start = current_end
-
-            if not all_dfs:
-                raise ValueError("未能获取到任何负载预测数据")
-
-            df = pd.concat(all_dfs, ignore_index=True)
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
-            df = df.drop_duplicates(subset=['timestamp']).sort_values('timestamp')
-            
-            logger.info(f"成功获取 {len(df)} 条负载预测数据 (已去重)")
-            return df
-=======
             load = self.client.query_load_forecast(
                 self.bidding_zone,
                 start=start,
@@ -411,12 +323,12 @@ class ENTSOEClient:
             
             logger.info(f"  📊 负载数据类型: {type(load)}")
             
-            # 处理DataFrame和Series两种情况
+            # Handle both DataFrame and Series cases
             if isinstance(load, pd.DataFrame):
                 logger.info(f"  📊 DataFrame 形状: {load.shape}")
                 logger.info(f"  📊 列名: {list(load.columns)}")
                 
-                # 检查重复索引
+                # Check for duplicate index entries
                 if load.index.duplicated().any():
                     logger.warning(f"  ⚠️  发现重复索引，正在去重...")
                     load = load[~load.index.duplicated()]
@@ -432,7 +344,7 @@ class ENTSOEClient:
             else:
                 logger.info(f"  📊 Series 长度: {len(load)}")
                 
-                # 检查重复索引
+                # Check for duplicate index entries
                 if load.index.duplicated().any():
                     logger.warning(f"  ⚠️  发现重复索引，正在去重...")
                     load = load[~load.index.duplicated()]
@@ -448,7 +360,7 @@ class ENTSOEClient:
             import traceback
             logger.error(f"   详细堆栈:\n{traceback.format_exc()}")
             
-            # 🛡️ 最终容错：返回空 DataFrame，让管道继续运行
+            # 🛡️ Final fallback: return an empty DataFrame so the pipeline can continue
             logger.warning("⚠️  所有方法都失败了，返回空负载预测数据")
             logger.warning("⚠️  后续的数据清洗步骤会使用前向填充或默认值")
             return pd.DataFrame(columns=['timestamp', 'load_forecast'])
@@ -474,7 +386,7 @@ class ENTSOEClient:
         response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
         
-        # 解析 XML
+        # Parse XML
         root = ET.fromstring(response.content)
         ns = {'ns': 'urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0'}
         
@@ -482,7 +394,7 @@ class ENTSOEClient:
         solar_data = {}
         
         for timeseries in root.findall('.//ns:TimeSeries', ns):
-            # 获取发电类型
+            # Get generation type
             psr_type_elem = timeseries.find('.//ns:MktPSRType/ns:psrType', ns)
             if psr_type_elem is None:
                 continue
@@ -507,7 +419,7 @@ class ENTSOEClient:
                     elif psr_type in ['B18', 'B19']:  # Wind (Offshore + Onshore)
                         wind_data[timestamp] = wind_data.get(timestamp, 0) + quantity
         
-        # 创建 DataFrame
+        # Create DataFrame
         all_timestamps = sorted(set(list(wind_data.keys()) + list(solar_data.keys())))
         
         df = pd.DataFrame({
@@ -518,7 +430,6 @@ class ENTSOEClient:
         
         logger.info(f"  ✅ 风光预测获取成功: {len(df)} 个时间点")
         return df
->>>>>>> 2534b7408ff3ed0345d9a709cb081f36063fb3df
     
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
     def fetch_wind_solar_forecast(self, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
@@ -527,7 +438,7 @@ class ENTSOEClient:
         """
         logger.info(f"获取风光预测: {start} 到 {end}")
         
-        # 优先尝试直接调用 REST API
+        # Prefer direct REST API call
         try:
             df = self._fetch_wind_solar_raw_api(start, end)
             logger.info(f"✅ 成功获取 {len(df)} 条风光预测数据（使用原始 API）")
@@ -536,9 +447,9 @@ class ENTSOEClient:
             logger.warning(f"⚠️  原始 API 调用失败: {raw_api_error}")
             logger.info(f"  尝试使用 entsoe-py 库...")
         
-        # 备用方案：使用 entsoe-py 库
+        # Fallback: use the entsoe-py library
         try:
-            # 获取风电和光伏预测
+            # Fetch wind and solar forecasts
             data = self.client.query_wind_and_solar_forecast(
                 self.bidding_zone,
                 start=start,
@@ -546,10 +457,10 @@ class ENTSOEClient:
                 psr_type=None  # 获取所有类型
             )
             
-            # 初始化结果DataFrame
+            # Initialize result DataFrame
             result_df = pd.DataFrame(index=data.index)
             
-            # 提取风电数据（可能有多种类型）
+            # Extract wind data (may contain multiple types)
             wind_total = 0
             wind_columns = []
             
@@ -566,12 +477,12 @@ class ENTSOEClient:
                 result_df['wind_forecast'] = 0
                 logger.warning("未找到风电数据，填充为0")
             
-            # 提取光伏数据
+            # Extract solar (PV) data
             if 'Solar' in data.columns:
                 result_df['solar_forecast'] = data['Solar']
                 logger.info("光伏数据来源: ['Solar']")
             elif 'solar' in [c.lower() for c in data.columns]:
-                # 查找小写solar列
+                # Look for a lowercase 'solar' column
                 solar_col = [c for c in data.columns if 'solar' in c.lower()][0]
                 result_df['solar_forecast'] = data[solar_col]
                 logger.info(f"光伏数据来源: ['{solar_col}']")
@@ -579,24 +490,11 @@ class ENTSOEClient:
                 result_df['solar_forecast'] = 0
                 logger.warning("未找到光伏数据，填充为0")
             
-            # 重置索引并选择需要的列
+            # Reset index and select required columns
             result_df = result_df.reset_index()
-<<<<<<< HEAD
-            
-            # 自动识别时间列名
-            if 'index' in result_df.columns:
-                result_df = result_df.rename(columns={'index': 'timestamp'})
-            elif result_df.columns[0] != 'timestamp':
-                # 第一列就是时间戳
-                result_df = result_df.rename(columns={result_df.columns[0]: 'timestamp'})
-            
-            # 确保时间戳是 datetime 类型
-            result_df['timestamp'] = pd.to_datetime(result_df['timestamp'])
-=======
-            # 确保第一列是时间戳
+            # Ensure first column is the timestamp
             if result_df.columns[0] != 'timestamp':
                 result_df = result_df.rename(columns={result_df.columns[0]: 'timestamp'})
->>>>>>> 2534b7408ff3ed0345d9a709cb081f36063fb3df
             result_df = result_df[['timestamp', 'wind_forecast', 'solar_forecast']]
             
             logger.info(f"成功获取 {len(result_df)} 条风光预测数据")
@@ -606,7 +504,7 @@ class ENTSOEClient:
             
         except Exception as e:
             logger.error(f"获取风光预测失败: {e}")
-            # 返回空DataFrame避免管道中断
+            # Return empty DataFrame to avoid breaking the pipeline
             logger.warning("返回空风光预测数据")
             return pd.DataFrame(columns=['timestamp', 'wind_forecast', 'solar_forecast'])
     
@@ -621,26 +519,26 @@ class ENTSOEClient:
         Returns:
             合并后的完整DataFrame
         """
-        # 转换为timezone-aware timestamps
+        # Convert to timezone-aware timestamps
         start = pd.Timestamp(start_date, tz=TIMEZONE)
         end = pd.Timestamp(end_date, tz=TIMEZONE)
         
-        # 获取各类数据
+        # Fetch each type of data
         prices_df = self.fetch_day_ahead_prices(start, end)
         load_df = self.fetch_load_forecast(start, end)
         wind_solar_df = self.fetch_wind_solar_forecast(start, end)
         
-        # 记录数据形状
+        # Log data shapes
         logger.info(f"数据形状: 价格={len(prices_df)}, 负载={len(load_df)}, 风光={len(wind_solar_df)}")
         
-        # 合并数据
+        # Merge data
         df = prices_df.merge(load_df, on='timestamp', how='left')
         logger.info(f"价格+负载合并后: {len(df)} 条记录")
         
         df = df.merge(wind_solar_df, on='timestamp', how='left')
         logger.info(f"最终合并后: {len(df)} 条记录")
         
-        # 填充缺失值（使用新版pandas语法）
+        # Fill missing values (using modern pandas syntax)
         df = df.ffill().bfill()
         
         logger.info(f"✅ 合并完成，共 {len(df)} 条记录")
@@ -648,10 +546,10 @@ class ENTSOEClient:
 
 
 def main():
-    """测试函数"""
+    """Test function"""
     client = ENTSOEClient()
     
-    # 测试获取最近3天的数据
+    # Test fetching the most recent 3 days of data
     end = pd.Timestamp.now(tz=TIMEZONE)
     start = end - pd.Timedelta(days=3)
     

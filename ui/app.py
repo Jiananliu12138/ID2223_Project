@@ -11,10 +11,10 @@ import json
 import os
 import sys
 
-# 添加项目根目录到路径
+# Add project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# 页面配置
+# Page configuration
 st.set_page_config(
     page_title="SE3 Electricity Price Prediction",
     page_icon="⚡",
@@ -22,7 +22,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 自定义CSS
+# Custom CSS
 st.markdown("""
 <style>
     .main-header {
@@ -57,7 +57,7 @@ st.markdown("""
 
 @st.cache_data(ttl=3600)
 def load_predictions():
-    """加载最新预测数据"""
+    """Load the latest prediction data"""
     try:
         # Use an absolute path relative to this file so Streamlit working dir doesn't matter
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -76,12 +76,12 @@ def load_predictions():
 
         return df
     except Exception as e:
-        st.error(f"加载预测数据失败: {e}")
+        st.error(f"Failed to load prediction data: {e}")
         return None
 
 
 def plot_price_comparison(df: pd.DataFrame):
-    """绘制价格对比图表"""
+    """Plot price comparison chart"""
     # Use a sorted copy so lines follow time order
     df_sorted = df.sort_values('timestamp').reset_index(drop=True)
 
@@ -169,12 +169,12 @@ def select_display_df(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def plot_hourly_heatmap(df: pd.DataFrame):
-    """绘制小时热力图"""
-    # 添加日期和小时列
+    """Plot hourly heatmap"""
+    # Add date and hour columns
     df['date'] = df['timestamp'].dt.date
     df['hour'] = df['timestamp'].dt.hour
     
-    # 透视表
+    # Pivot table
     pivot = df.pivot(index='date', columns='hour', values='predicted_price')
     # Ensure rows and columns are in chronological order
     pivot = pivot.sort_index()
@@ -199,19 +199,19 @@ def plot_hourly_heatmap(df: pd.DataFrame):
 
 
 def display_laundry_ticker(df: pd.DataFrame):
-    """显示"洗衣计时器" - 最便宜的用电时段"""
+    """Display the 'Laundry Timer' - cheapest electricity periods"""
     st.markdown('<div class="sub-header">🧺 Best period for laundry</div>', 
                 unsafe_allow_html=True)
-    # 限定在未来24小时内查找最便宜的4小时（优先展示未来时段）
+    # Limit search to the next 24 hours for the cheapest 4 hours (prefer future periods)
     try:
         now = pd.Timestamp.now(tz='UTC')
         window_end = now + pd.Timedelta(hours=24)
         future_window = df[(df['timestamp'] >= now) & (df['timestamp'] <= window_end)]
     except Exception:
-        # 回退：如果时间比较失败，则使用全部数据
+        # Fallback: use full dataset if time comparison fails
         future_window = df
 
-    # 在未来24小时内选最便宜的4个时段；如果未来24小时没有数据，则退回到全数据选取
+    # Select 4 cheapest periods within next 24 hours; fallback to full data if none
     if len(future_window) >= 4:
         cheapest = future_window.nsmallest(4, 'predicted_price').reset_index(drop=True)
     else:
@@ -221,7 +221,7 @@ def display_laundry_ticker(df: pd.DataFrame):
     
     cols = st.columns(4)
     
-    # cheapest 已按价格升序排列，序号即为价格排名
+    # 'cheapest' is sorted ascending by price; index is price rank
     for idx, (_, row) in enumerate(cheapest.iterrows()):
         with cols[idx]:
             st.markdown(f"""
@@ -238,7 +238,7 @@ def display_laundry_ticker(df: pd.DataFrame):
 
 
 def display_metrics(df: pd.DataFrame):
-    """显示关键指标"""
+    """Display key metrics"""
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -264,8 +264,8 @@ def display_metrics(df: pd.DataFrame):
 
 
 def main():
-    """主函数"""
-    # 标题
+    """Main function"""
+    # Header
     st.markdown('<div class="main-header">⚡ Electricity Price Prediction System for SE3</div>', 
                 unsafe_allow_html=True)
     
@@ -277,7 +277,7 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
-    # 侧边栏
+    # Sidebar
     with st.sidebar:
         st.image("https://upload.wikimedia.org/wikipedia/commons/4/4c/Flag_of_Sweden.svg", 
                 width=100)
@@ -304,7 +304,7 @@ This system uses machine learning to predict electricity prices in Sweden's SE3 
         st.markdown("- ENTSO-E Transparency Platform")
         st.markdown("- Open-Meteo Weather API")
         
-    # 加载数据
+    # Load data
     df = load_predictions()
     
     if df is None or len(df) == 0:
@@ -312,24 +312,24 @@ This system uses machine learning to predict electricity prices in Sweden's SE3 
         st.info("运行推理管道: `python pipelines/4_inference_pipeline.py`")
         return
     
-    # 显示最后更新时间
+    # Show last updated timestamp
     st.success(f"📅 Last Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # 关键指标（展示全部数据）
+    # Key metrics (use whole dataset)
     display_metrics(df)
     
     st.markdown("---")
     
-    # 主图表
+    # Main chart
     fig_main = plot_price_comparison(df)
     st.plotly_chart(fig_main, use_container_width=True)
     
-    # 洗衣计时器
+    # Laundry timer
     display_laundry_ticker(df)
     
     st.markdown("---")
     
-    # 详细分析
+    # Detailed analysis
     col1, col2 = st.columns(2)
     
     with col1:
@@ -357,7 +357,7 @@ This system uses machine learning to predict electricity prices in Sweden's SE3 
         )
         st.plotly_chart(fig_hourly, use_container_width=True)
     
-    # 数据表
+    # Data table
     with st.expander("📋 Details"):
         # Show full table including mode if present
         cols = ['timestamp', 'predicted_price']
@@ -373,7 +373,7 @@ This system uses machine learning to predict electricity prices in Sweden's SE3 
             use_container_width=True
         )
     
-    # 页脚
+    # Footer
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; color: #999; font-size: 12px;">

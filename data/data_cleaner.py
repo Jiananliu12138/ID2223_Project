@@ -1,5 +1,5 @@
 """
-数据清洗与预处理模块
+Data Cleaning and Preprocessing Module
 """
 import pandas as pd
 import numpy as np
@@ -11,18 +11,18 @@ logger = logging.getLogger(__name__)
 
 
 class DataCleaner:
-    """数据清洗工具类"""
+    """Data cleaning utility class"""
     
     @staticmethod
     def check_missing_data(df: pd.DataFrame) -> dict:
         """
-        检查缺失数据统计
+        Check missing data statistics
         
         Args:
-            df: 输入DataFrame
+            df: Input DataFrame
             
         Returns:
-            缺失数据统计字典
+            Dictionary of missing data statistics
         """
         missing_stats = {}
         for col in df.columns:
@@ -41,22 +41,22 @@ class DataCleaner:
                            max_gap_hours: int = 3,
                            method: str = 'linear') -> pd.DataFrame:
         """
-        插值填充缺失数据
+        Interpolate and fill missing data
         
         Args:
-            df: 输入DataFrame
-            max_gap_hours: 最大允许插值的连续缺失小时数
-            method: 插值方法 ('linear', 'time', 'polynomial')
+            df: Input DataFrame
+            max_gap_hours: Maximum allowed consecutive missing hours for interpolation
+            method: Interpolation method ('linear', 'time', 'polynomial')
             
         Returns:
-            填充后的DataFrame
+            Filled DataFrame
         """
         df = df.copy()
         
         numeric_cols = df.select_dtypes(include=[np.number]).columns
         
         for col in numeric_cols:
-            # 识别缺失值块
+            # Identify missing value blocks
             is_missing = df[col].isna()
             missing_blocks = (is_missing != is_missing.shift()).cumsum()
             
@@ -65,15 +65,15 @@ class DataCleaner:
                 block_size = block_mask.sum()
                 
                 if block_size <= max_gap_hours:
-                    # 小缺口:使用插值
+                    # Small gaps: use interpolation
                     df.loc[block_mask, col] = df[col].interpolate(method=method)[block_mask]
-                    logger.info(f"{col}: 插值填充 {block_size} 个缺失值")
+                    logger.info(f"{col}: Interpolated {block_size} missing values")
                 else:
-                    # 大缺口:使用前向填充
+                    # Large gaps: use forward fill
                     df.loc[block_mask, col] = df[col].ffill()[block_mask]
-                    logger.warning(f"{col}: 连续缺失 {block_size} 小时,使用前向填充")
+                    logger.warning(f"{col}: Consecutive {block_size} hours missing, using forward fill")
         
-        # 最后处理剩余的缺失值(如开头)
+        # Finally handle remaining missing values (e.g., at the beginning)
         df = df.bfill().ffill()
         
         return df
@@ -83,15 +83,15 @@ class DataCleaner:
                        columns: list,
                        n_std: float = 4.0) -> pd.DataFrame:
         """
-        移除异常值(基于标准差)
+        Remove outliers (based on standard deviation)
         
         Args:
-            df: 输入DataFrame
-            columns: 需要检查的列名列表
-            n_std: 标准差倍数阈值
+            df: Input DataFrame
+            columns: List of column names to check
+            n_std: Standard deviation multiplier threshold
             
         Returns:
-            处理后的DataFrame
+            Processed DataFrame
         """
         df = df.copy()
         
@@ -107,7 +107,7 @@ class DataCleaner:
                 n_outliers = outliers.sum()
                 
                 if n_outliers > 0:
-                    logger.info(f"{col}: 发现 {n_outliers} 个异常值,将替换为边界值")
+                    logger.info(f"{col}: Found {n_outliers} outliers, will replace with boundary values")
                     df.loc[df[col] < lower_bound, col] = lower_bound
                     df.loc[df[col] > upper_bound, col] = upper_bound
         
@@ -119,16 +119,16 @@ class DataCleaner:
                             min_price: float = -500,
                             max_price: float = 1000) -> pd.DataFrame:
         """
-        验证价格范围(欧洲市场可能有负价格)
+        Validate price range (European market may have negative prices)
         
         Args:
-            df: 输入DataFrame
-            price_col: 价格列名
-            min_price: 最小合理价格 (EUR/MWh)
-            max_price: 最大合理价格 (EUR/MWh)
+            df: Input DataFrame
+            price_col: Price column name
+            min_price: Minimum reasonable price (EUR/MWh)
+            max_price: Maximum reasonable price (EUR/MWh)
             
         Returns:
-            验证后的DataFrame
+            Validated DataFrame
         """
         df = df.copy()
         
@@ -137,8 +137,8 @@ class DataCleaner:
             n_invalid = invalid_prices.sum()
             
             if n_invalid > 0:
-                logger.warning(f"发现 {n_invalid} 个超出合理范围的价格值")
-                # 替换为NaN,后续用插值处理
+                logger.warning(f"Found {n_invalid} prices out of reasonable range")
+                # Replace with NaN, will be handled with interpolation later
                 df.loc[invalid_prices, price_col] = np.nan
         
         return df
@@ -147,27 +147,27 @@ class DataCleaner:
     def ensure_hourly_continuity(df: pd.DataFrame, 
                                  timestamp_col: str = 'timestamp') -> pd.DataFrame:
         """
-        确保时间序列连续性,填充缺失的小时
+        Ensure hourly continuity of time series, fill missing hours
         
         Args:
-            df: 输入DataFrame
-            timestamp_col: 时间戳列名
+            df: Input DataFrame
+            timestamp_col: Timestamp column name
             
         Returns:
-            连续的DataFrame
+            Continuous DataFrame
         """
         df = df.copy()
         df[timestamp_col] = pd.to_datetime(df[timestamp_col])
         df = df.sort_values(timestamp_col)
         
-        # 创建完整的小时索引
+        # Create complete hourly index
         full_range = pd.date_range(
             start=df[timestamp_col].min(),
             end=df[timestamp_col].max(),
-            freq='h'  # 小写h (大写H已弃用)
+            freq='h'  # lowercase h (uppercase H is deprecated)
         )
         
-        # 重新索引
+        # Reindex
         df = df.set_index(timestamp_col)
         df = df.reindex(full_range)
         df.index.name = timestamp_col
@@ -175,51 +175,51 @@ class DataCleaner:
         
         missing_hours = df.isna().any(axis=1).sum()
         if missing_hours > 0:
-            logger.info(f"填充了 {missing_hours} 个缺失的时间点")
+            logger.info(f"Filled {missing_hours} missing time points")
         
         return df
     
     @staticmethod
     def clean_pipeline(df: pd.DataFrame) -> pd.DataFrame:
         """
-        完整的数据清洗管道
+        Complete data cleaning pipeline
         
         Args:
-            df: 原始DataFrame
+            df: Raw DataFrame
             
         Returns:
-            清洗后的DataFrame
+            Cleaned DataFrame
         """
-        logger.info("开始数据清洗流程...")
+        logger.info("Starting data cleaning pipeline...")
         
-        # 1. 确保时间连续性
+        # 1. Ensure time continuity
         df = DataCleaner.ensure_hourly_continuity(df)
         
-        # 2. 检查缺失数据
+        # 2. Check missing data
         missing_stats = DataCleaner.check_missing_data(df)
         if missing_stats:
-            logger.info(f"缺失数据统计: {missing_stats}")
+            logger.info(f"Missing data statistics: {missing_stats}")
         
-        # 3. 价格范围验证
+        # 3. Price range validation
         if 'price' in df.columns:
             df = DataCleaner.validate_price_range(df)
         
-        # 4. 插值填充
+        # 4. Interpolate and fill
         df = DataCleaner.interpolate_missing(df, max_gap_hours=MAX_MISSING_HOURS)
         
-        # 5. 移除异常值(除了价格,价格可能合理地很极端)
+        # 5. Remove outliers (except price, which may reasonably be extreme)
         outlier_cols = [col for col in df.columns 
                        if col not in ['timestamp', 'price'] and df[col].dtype in [np.float64, np.int64]]
         if outlier_cols:
             df = DataCleaner.remove_outliers(df, outlier_cols)
         
-        logger.info("数据清洗完成")
+        logger.info("Data cleaning complete")
         return df
 
 
 def main():
-    """测试函数"""
-    # 创建测试数据
+    """Test function"""
+    # Create test data
     dates = pd.date_range('2024-01-01', periods=100, freq='h')
     df = pd.DataFrame({
         'timestamp': dates,
@@ -227,17 +227,17 @@ def main():
         'load': np.random.uniform(5000, 10000, 100)
     })
     
-    # 人工引入缺失值
+    # Manually introduce missing values
     df.loc[10:12, 'price'] = np.nan
     df.loc[50:56, 'load'] = np.nan
     
-    print("清洗前:")
+    print("Before cleaning:")
     print(DataCleaner.check_missing_data(df))
     
-    # 清洗
+    # Clean data
     df_clean = DataCleaner.clean_pipeline(df)
     
-    print("\n清洗后:")
+    print("\nAfter cleaning:")
     print(DataCleaner.check_missing_data(df_clean))
 
 

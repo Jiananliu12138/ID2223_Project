@@ -1,6 +1,6 @@
 """
-模型训练管道
-从Feature Store读取数据,训练模型并保存到Model Registry
+Model training pipeline
+Read data from Feature Store, train model and save to Model Registry
 """
 import sys
 import os
@@ -25,24 +25,24 @@ logger = logging.getLogger(__name__)
 
 
 def train_model():
-    """主训练流程 - 完整 MLOps 工作流（11个步骤）"""
+    """Main training pipeline - Complete MLOps workflow (11 steps)"""
     logger.info(f"\n{'='*70}")
-    logger.info(f"模型训练管道 - {datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(f"Model training pipeline - {datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"{'='*70}\n")
     
     try:
-        # 1. 连接Feature Store
-        logger.info("步骤 1/9: 连接Feature Store...")
+        # Step 1: Connect to Feature Store
+        logger.info("Step 1/9: Connecting to Feature Store...")
         fsm = FeatureStoreManager()
         
-        # 2. 从 Feature Groups 读取原始数据
-        logger.info("步骤 2/9: 从 Feature Groups 读取原始数据...")
+        # Step 2: Read raw data from Feature Groups
+        logger.info("Step 2/9: Reading raw data from Feature Groups...")
         
-        # 计算时间范围(最近训练窗口个月)
+        # Calculate time range (most recent training window months)
         end_date = datetime.now(TIMEZONE)
         start_date = end_date - timedelta(days=TRAINING_WINDOW_MONTHS * 30)
         
-        logger.info(f"  数据范围: {start_date.strftime('%Y-%m-%d')} 到 {end_date.strftime('%Y-%m-%d')}")
+        logger.info(f"  Data range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
         
         # 直接从 Feature Groups 读取并合并数据
         df = fsm.read_raw_feature_groups(
@@ -50,116 +50,116 @@ def train_model():
             end_time=end_date.strftime('%Y-%m-%d %H:%M:%S')
         )
         
-        logger.info(f"  ✅ 读取了 {len(df)} 条原始记录")
+        logger.info(f"  ✅ Read {len(df)} raw records")
         
-        # 3. 特征工程
-        logger.info("步骤 3/9: 特征工程...")
-        logger.info(f"  原始特征数: {len(df.columns)}")
+        # Step 3: Feature engineering
+        logger.info("Step 3/9: Feature engineering...")
+        logger.info(f"  Original feature count: {len(df.columns)}")
         
         df_engineered = FeatureEngineer.engineer_features_pipeline(df, include_lag=True)
         
-        logger.info(f"  工程特征数: {len(df_engineered.columns)}")
-        logger.info(f"  新增特征: {len(df_engineered.columns) - len(df.columns)} 个")
+        logger.info(f"  Engineered feature count: {len(df_engineered.columns)}")
+        logger.info(f"  New features added: {len(df_engineered.columns) - len(df.columns)}")
         
-        # 4. 时区标准化处理（保存到 Hopsworks 前）
-        logger.info("步骤 4/9: 时区标准化...")
+        # Step 4: Timezone standardization
+        logger.info("Step 4/9: Timezone standardization...")
         if 'timestamp' in df_engineered.columns:
             df_engineered['timestamp'] = pd.to_datetime(df_engineered['timestamp'])
             
-            # 如果是 naive datetime，添加时区
+            # If naive datetime, add timezone
             if df_engineered['timestamp'].dt.tz is None:
                 df_engineered['timestamp'] = df_engineered['timestamp'].dt.tz_localize(TIMEZONE)
-                logger.info(f"  已将时区设置为 {TIMEZONE}")
+                logger.info(f"  Set timezone to {TIMEZONE}")
             else:
-                # 如果已有时区，统一转换为配置的时区
+                # If timezone exists, convert to configured timezone
                 df_engineered['timestamp'] = df_engineered['timestamp'].dt.tz_convert(TIMEZONE)
-                logger.info(f"  已将时区转换为 {TIMEZONE}")
+                logger.info(f"  Converted timezone to {TIMEZONE}")
         
-        # 5. 保存工程特征到新的 Feature Group
-        logger.info("步骤 5/9: 保存工程特征到 Feature Store...")
+        # Step 5: Save engineered features to new Feature Group
+        logger.info("Step 5/9: Saving engineered features to Feature Store...")
         fsm.create_engineered_feature_group(df_engineered)
         
-        # 6. 创建/获取 Feature View
-        logger.info("步骤 6/10: 创建/获取工程特征视图...")
+        # Step 6: Create/get Feature View
+        logger.info("Step 6/10: Creating/getting engineered feature view...")
         feature_view = fsm.get_engineered_feature_view()
         
-        # 7. 从 Feature View 读取训练和测试数据
-        logger.info("步骤 7/10: 从 Feature View 读取训练和测试数据...")
+        # Step 7: Read training and testing data from Feature View
+        logger.info("Step 7/10: Reading training and testing data from Feature View...")
         
-        # 计算测试集起始时间（最近20%的数据作为测试集）
+        # Calculate test set start time (last 20% of data as test set)
         total_days = (end_date - start_date).days
         test_days = int(total_days * 0.2)
         test_start = end_date - timedelta(days=test_days)
         
-        logger.info(f"  训练数据: {start_date.strftime('%Y-%m-%d')} 到 {test_start.strftime('%Y-%m-%d')}")
-        logger.info(f"  测试数据: {test_start.strftime('%Y-%m-%d')} 到 {end_date.strftime('%Y-%m-%d')}")
+        logger.info(f"  Training data: {start_date.strftime('%Y-%m-%d')} to {test_start.strftime('%Y-%m-%d')}")
+        logger.info(f"  Testing data: {test_start.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
         
         # 使用 Feature View 的 train_test_split
         X_train, X_test, y_train, y_test = feature_view.train_test_split(
             test_start=test_start.strftime('%Y-%m-%d %H:%M:%S')
         )
         
-        logger.info(f"  ✅ 训练集: {len(X_train)} 样本, {len(X_train.columns)} 特征")
-        logger.info(f"  ✅ 测试集: {len(X_test)} 样本")
+        logger.info(f"  ✅ Training set: {len(X_train)} samples, {len(X_train.columns)} features")
+        logger.info(f"  ✅ Testing set: {len(X_test)} samples")
         
-        # 从训练集中分出验证集
-        train_val_split = int(len(X_train) * 0.85)  # 85%训练，15%验证
+        # Separate validation set from training set
+        train_val_split = int(len(X_train) * 0.85)  # 85% training, 15% validation
         X_val = X_train.iloc[train_val_split:]
         y_val = y_train.iloc[train_val_split:]
         X_train = X_train.iloc[:train_val_split]
         y_train = y_train.iloc[:train_val_split]
         
-        logger.info(f"  ✅ 验证集: {len(X_val)} 样本（从训练集分出）")
+        logger.info(f"  ✅ Validation set: {len(X_val)} samples (separated from training set)")
         
-        # 7.5. 数据清理（移除非数值列）
-        logger.info("步骤 7.5/10: 数据清理...")
+        # Step 7.5: Data cleaning (remove non-numeric columns)
+        logger.info("Step 7.5/10: Data cleaning...")
         
-        # 移除 timestamp 列和其他非数值列
+        # Remove timestamp column and other non-numeric columns
         exclude_cols = ['timestamp']
         cols_to_drop = [col for col in X_train.columns if col in exclude_cols or X_train[col].dtype == 'object']
         
         if cols_to_drop:
-            logger.info(f"  移除列: {cols_to_drop}")
+            logger.info(f"  Columns to remove: {cols_to_drop}")
             X_train = X_train.drop(columns=cols_to_drop)
             X_val = X_val.drop(columns=cols_to_drop)
             X_test = X_test.drop(columns=cols_to_drop)
         
-        logger.info(f"  ✅ 清理后特征数: {len(X_train.columns)}")
+        logger.info(f"  ✅ Feature count after cleaning: {len(X_train.columns)}")
         
-        # 8. 训练模型
-        logger.info("步骤 8/10: 训练模型...")
+        # Step 8: Train model
+        logger.info("Step 8/10: Training model...")
         
         model = ElectricityPriceModel(model_type='xgboost')
         model.train(X_train, y_train, X_val, y_val)
         
-        # 9. 评估模型
-        logger.info("步骤 9/11: 评估模型...")
+        # Step 9: Evaluate model
+        logger.info("Step 9/11: Evaluating model...")
         
         train_metrics = model.evaluate(X_train, y_train)
         val_metrics = model.evaluate(X_val, y_val)
         test_metrics = model.evaluate(X_test, y_test)
         
-        logger.info("\n📊 性能汇总:")
-        logger.info(f"  训练集 MAE: {train_metrics['MAE']:.2f} EUR/MWh")
-        logger.info(f"  验证集 MAE: {val_metrics['MAE']:.2f} EUR/MWh")
-        logger.info(f"  测试集 MAE: {test_metrics['MAE']:.2f} EUR/MWh")
+        logger.info("\n📊 Performance summary:")
+        logger.info(f"  Training set MAE: {train_metrics['MAE']:.2f} EUR/MWh")
+        logger.info(f"  Validation set MAE: {val_metrics['MAE']:.2f} EUR/MWh")
+        logger.info(f"  Testing set MAE: {test_metrics['MAE']:.2f} EUR/MWh")
         
-        # 10. 保存到本地
-        logger.info("步骤 10/11: 保存模型到本地...")
+        # Step 10: Save to local
+        logger.info("Step 10/11: Saving model locally...")
         
-        # 本地保存
+        # Local save
         model_path = f"models/{MODEL_NAME}.pkl"
         os.makedirs("models", exist_ok=True)
         model.save_model(model_path)
-        logger.info(f"  ✅ 本地模型: {model_path}")
+        logger.info(f"  ✅ Local model: {model_path}")
         
-        # 11. 保存到Model Registry
-        logger.info("步骤 11/11: 保存模型到Hopsworks Model Registry...")
+        # Step 11: Save to Model Registry
+        logger.info("Step 11/11: Saving model to Hopsworks Model Registry...")
         
-        # 保存到Hopsworks Model Registry
+        # Save to Hopsworks Model Registry
         mr = fsm.get_model_registry()
         
-        # 创建模型元数据（只包含数值）
+        # Create model metadata (only numeric values)
         model_metrics = {
             'train_mae': float(train_metrics['MAE']),
             'train_rmse': float(train_metrics['RMSE']),
@@ -174,7 +174,7 @@ def train_model():
             'feature_count': int(len(X_train.columns))
         }
         
-        # 注册模型
+        # Register model
         model_dir = "models"
         training_date = datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')
         
@@ -188,18 +188,18 @@ def train_model():
         electricity_model.save(model_dir)
         
         logger.info(f"\n{'='*70}")
-        logger.info("✅ 模型训练完成!")
-        logger.info(f"  模型名称: {MODEL_NAME}")
-        logger.info(f"  测试集MAE: {test_metrics['MAE']:.2f} EUR/MWh")
-        logger.info(f"  模型路径: {model_path}")
+        logger.info("✅ Model training complete!")
+        logger.info(f"  Model name: {MODEL_NAME}")
+        logger.info(f"  Testing set MAE: {test_metrics['MAE']:.2f} EUR/MWh")
+        logger.info(f"  Model path: {model_path}")
         logger.info(f"{'='*70}\n")
         
         return True
         
     except Exception as e:
         logger.error(f"\n{'='*70}")
-        logger.error("❌ 模型训练失败!")
-        logger.error(f"错误信息: {e}")
+        logger.error("❌ Model training failed!")
+        logger.error(f"Error message: {e}")
         logger.error(f"{'='*70}\n")
         import traceback
         traceback.print_exc()
@@ -207,14 +207,14 @@ def train_model():
 
 
 def main():
-    """主函数"""
+    """Main function"""
     success = train_model()
     
     if success:
-        logger.info("训练管道执行成功")
+        logger.info("Training pipeline executed successfully")
         exit(0)
     else:
-        logger.error("训练管道执行失败")
+        logger.error("Training pipeline execution failed")
         exit(1)
 
 

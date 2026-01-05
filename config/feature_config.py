@@ -1,8 +1,8 @@
 """
-特征定义配置
+Feature definition configuration
 """
 
-# 时间特征
+# Time features
 TIME_FEATURES = [
     'hour',
     'day_of_week',
@@ -11,49 +11,49 @@ TIME_FEATURES = [
     'is_holiday'
 ]
 
-# 市场特征
+# Market features
 MARKET_FEATURES = [
-    'load_forecast',           # 总负载预测 (MW)
-    'wind_forecast',          # 风电预测 (MW)
-    'solar_forecast',         # 光伏预测 (MW)
-    'residual_load',          # 残差负载 = load - (wind + solar)
-    'renewable_ratio'         # 可再生能源占比
+    'load_forecast',           # Total load forecast (MW)
+    'wind_forecast',          # Wind power forecast (MW)
+    'solar_forecast',         # Solar forecast (MW)
+    'residual_load',          # Residual load = load - (wind + solar)
+    'renewable_ratio'         # Renewable energy ratio
 ]
 
-# 天气特征
+# Weather features
 WEATHER_FEATURES = [
-    'temperature_avg',        # 平均温度 (°C)
-    'wind_speed_10m_avg',    # 10m风速平均 (m/s)
-    'wind_speed_80m_avg',    # 80m风速平均 (m/s)
-    'irradiance_avg'         # 辐照度平均 (W/m²)
+    'temperature_avg',        # Average temperature (°C)
+    'wind_speed_10m_avg',    # 10m average wind speed (m/s)
+    'wind_speed_80m_avg',    # 80m average wind speed (m/s)
+    'irradiance_avg'         # Average irradiance (W/m²)
 ]
 
-# 滞后特征
+# Lag features
 LAG_FEATURES = [
-    'price_lag_1h',          # 1小时前价格
-    'price_lag_24h',         # 24小时前价格
-    'price_lag_168h',        # 168小时前价格(上周同时)
-    'price_rolling_mean_24h', # 过去24小时均价
-    'price_rolling_std_24h',  # 过去24小时价格标准差
-    'price_rolling_min_24h',  # 过去24小时最低价
-    'price_rolling_max_24h'   # 过去24小时最高价
+    'price_lag_1h',          # Price 1 hour ago
+    'price_lag_24h',         # Price 24 hours ago
+    'price_lag_168h',        # Price 168 hours ago (same time last week)
+    'price_rolling_mean_24h', # Average price over past 24 hours
+    'price_rolling_std_24h',  # Price standard deviation over past 24 hours
+    'price_rolling_min_24h',  # Lowest price over past 24 hours
+    'price_rolling_max_24h'   # Highest price over past 24 hours
 ]
 
-# 所有特征列表
+# All features list
 ALL_FEATURES = TIME_FEATURES + MARKET_FEATURES + WEATHER_FEATURES + LAG_FEATURES
 
-# 目标变量
+# Target variable
 TARGET = 'price'  # EUR/MWh
 
-# 瑞典公共假日(简化版,应使用holidays库)
+# Swedish public holidays (simplified version, should use holidays library)
 SWEDISH_HOLIDAYS = [
-    '01-01',  # 新年
-    '01-06',  # 主显节
-    '05-01',  # 劳动节
-    '06-06',  # 国庆日
-    '12-24',  # 平安夜
-    '12-25',  # 圣诞节
-    '12-26',  # 节礼日
-    '12-31',  # 除夕
+    '01-01',  # New Year
+    '01-06',  # Epiphany
+    '05-01',  # Labour Day
+    '06-06',  # National Day
+    '12-24',  # Christmas Eve
+    '12-25',  # Christmas
+    '12-26',  # Boxing Day
+    '12-31',  # New Year's Eve
 ]
 

@@ -1,6 +1,6 @@
 """
-历史数据回填管道
-用于初始化Feature Store,获取历史2年的数据
+Historical backfill pipeline
+Used to initialize the Feature Store and fetch historical data (2 years)
 """
 import sys
 import os
@@ -74,18 +74,18 @@ def normalize_dataframe_timestamps(df: pd.DataFrame, time_col: str = 'timestamp'
 
 def backfill_monthly(start_date: str, end_date: str, fsm: FeatureStoreManager):
     """
-    按月回填数据(避免API超时)
+    Backfill data monthly (avoids API timeouts)
     
     Args:
-        start_date: 开始日期 'YYYY-MM-DD'
-        end_date: 结束日期 'YYYY-MM-DD'
-        fsm: Feature Store管理器
+        start_date: start date 'YYYY-MM-DD'
+        end_date: end date 'YYYY-MM-DD'
+        fsm: Feature Store manager
     """
-    # 初始化客户端
+    # Initialize clients
     entsoe_client = ENTSOEClient()
     weather_client = WeatherClient()
     
-    # 生成月度时间范围
+    # Generate monthly date ranges
     start = pd.to_datetime(start_date)
     end = pd.to_datetime(end_date)
     counter = 0
@@ -103,36 +103,36 @@ def backfill_monthly(start_date: str, end_date: str, fsm: FeatureStoreManager):
         logger.info(f"{'='*60}")
         
         try:
-            # 1. 获取ENTSO-E市场数据
+            # 1. Fetch ENTSO-E market data
             logger.info("步骤 1/5: 获取ENTSO-E市场数据...")
             market_df = entsoe_client.fetch_all_market_data(
                 month_start_str, 
                 month_end_str
             )
             
-            # 2. 获取天气数据
+            # 2. Fetch weather data
             logger.info("步骤 2/5: 获取天气数据...")
             weather_df = weather_client.fetch_historical(
                 month_start_str,
                 month_end_str
             )
             
-            # 3. 合并数据
+            # 3. Merge data
             logger.info("步骤 3/5: 合并数据...")
 
-            # 统一并标准化时间列：安全地本地化到配置时区，然后转换为 UTC，去重
+            # Normalize and standardize time columns: safely localize to configured timezone, convert to UTC, deduplicate
             market_df = normalize_dataframe_timestamps(market_df, time_col='timestamp', tz=TIMEZONE, name='市场数据')
             weather_df = normalize_dataframe_timestamps(weather_df, time_col='timestamp', tz=TIMEZONE, name='天气数据')
 
-            # 在合并前确保两个表的 timestamp 列均为相同类型（UTC或naive）
+            # Ensure both tables have timestamp columns of the same type (UTC or naive) before merging
             merged_df = market_df.merge(weather_df, on='timestamp', how='left')
             
-            # 4. 数据清洗
+            # 4. Data cleaning
             logger.info("步骤 4/5: 数据清洗...")
             cleaned_df = DataCleaner.clean_pipeline(merged_df)
             
             try:
-                # 如果为 tz-aware（例如 UTC），直接转换；否则先 localize 到 UTC 再转换
+                # If tz-aware (e.g., UTC), convert directly; otherwise localize to UTC then convert
                 if cleaned_df['timestamp'].dt.tz is None:
                     cleaned_df['timestamp'] = pd.to_datetime(cleaned_df['timestamp']).dt.tz_localize('UTC').dt.tz_convert(TIMEZONE)
                 else:
@@ -142,10 +142,10 @@ def backfill_monthly(start_date: str, end_date: str, fsm: FeatureStoreManager):
                 logger.warning("转换合并后时间戳到 %s 时区失败: %s。保留原始时间戳。", TIMEZONE, e)
         
             
-            # 5. 上传到Hopsworks
+            # 5. Upload to Hopsworks
             logger.info("步骤 5/5: 上传到Feature Store...")
             
-            # 分离电力和天气数据
+            # Split electricity and weather data
             electricity_cols = ['timestamp', 'price', 'load_forecast', 
                               'wind_forecast', 'solar_forecast']
             weather_cols = ['timestamp', 'temperature_avg', 'wind_speed_10m_avg',
@@ -154,7 +154,7 @@ def backfill_monthly(start_date: str, end_date: str, fsm: FeatureStoreManager):
             electricity_df = cleaned_df[electricity_cols]
             weather_df = cleaned_df[weather_cols]
             
-            # 保存到本地 (不上传到 Hopsworks)
+            # Save locally (do not upload to Hopsworks)
             month_str = month_start.strftime('%Y-%m')
             fsm.save_electricity_data_local(electricity_df, month_str)
             fsm.save_weather_data_local(weather_df, month_str)
@@ -169,29 +169,29 @@ def backfill_monthly(start_date: str, end_date: str, fsm: FeatureStoreManager):
     return counter
 
 def main():
-    """主函数"""
+    """Main function"""
     logger.info(f"\n{'='*70}")
     logger.info("开始历史数据回填流程")
     logger.info(f"{'='*70}\n")
     
-    # 计算回填时间范围
+    # Compute backfill time range
     end_date = datetime.now().strftime('%Y-%m-%d')
     start_date = BACKFILL_START_DATE
     
     logger.info(f"回填范围: {start_date} 到 {end_date}")
     logger.info(f"预计耗时: 约 {pd.to_datetime(end_date).year - pd.to_datetime(start_date).year} 年数据")
     
-    # 用户确认
+    # User confirmation
     confirm = input("\n开始回填? 这可能需要较长时间 (y/n): ")
     if confirm.lower() != 'y':
         logger.info("用户取消回填")
         return
     
-    # 初始化Feature Store (仅本地模式，不连接Hopsworks)
+    # Initialize Feature Store (local-only, do not connect to Hopsworks)
     logger.info("\n初始化本地数据管理器...")
     fsm = FeatureStoreManager(local_only=True)
     
-    # 执行回填
+    # Run backfill
     counter = backfill_monthly(start_date, end_date, fsm)
     
     logger.info(f"\n{'='*70}")

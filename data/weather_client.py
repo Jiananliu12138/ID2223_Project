@@ -1,5 +1,5 @@
 """
-Open-Meteo天气数据获取客户端
+Open-Meteo weather data client
 """
 import requests
 import pandas as pd
@@ -14,21 +14,21 @@ logger = logging.getLogger(__name__)
 
 
 class WeatherClient:
-    """Open-Meteo天气API客户端"""
+    """Open-Meteo weather API client"""
     
     BASE_URL = "https://api.open-meteo.com/v1/forecast"
     ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
     
     def __init__(self, locations: List[Dict] = None):
         """
-        初始化天气客户端
+        Initialize weather client
         
         Args:
-            locations: 位置列表,每个位置包含name, lat, lon, weight
+            locations: list of locations, each with name, lat, lon, weight
         """
         self.locations = locations or SE3_LOCATIONS
         
-        # 验证权重总和为1
+        # Verify weights sum to 1
         total_weight = sum(loc['weight'] for loc in self.locations)
         if not np.isclose(total_weight, 1.0):
             logger.warning(f"位置权重总和为 {total_weight},将自动归一化")
@@ -37,16 +37,16 @@ class WeatherClient:
     
     def fetch_forecast(self, start_date: str, end_date: str) -> pd.DataFrame:
         """
-        获取天气预报数据(最多16天)
+        Fetch weather forecast data (up to 16 days)
         
         Args:
-            start_date: 开始日期 'YYYY-MM-DD'
-            end_date: 结束日期 'YYYY-MM-DD'
+            start_date: start date 'YYYY-MM-DD'
+            end_date: end date 'YYYY-MM-DD'
             
         Returns:
-            加权平均后的天气DataFrame
+            Weighted average weather DataFrame
         """
-        logger.info(f"获取天气预报: {start_date} 到 {end_date}")
+        logger.info(f"Fetching weather forecast: {start_date} to {end_date}")
         
         all_location_data = []
         
@@ -70,7 +70,7 @@ class WeatherClient:
                 response.raise_for_status()
                 data = response.json()
                 
-                # 转换为DataFrame
+                # Convert to DataFrame
                 df = pd.DataFrame({
                     'timestamp': pd.to_datetime(data['hourly']['time']),
                     'temperature_2m': data['hourly']['temperature_2m'],
@@ -79,26 +79,26 @@ class WeatherClient:
                     'irradiance': data['hourly']['direct_normal_irradiance']
                 })
                 
-                # 应用权重
+                # Apply weights
                 for col in ['temperature_2m', 'wind_speed_10m', 'wind_speed_80m', 'irradiance']:
                     df[col] = df[col] * location['weight']
                 
                 df['location'] = location['name']
                 all_location_data.append(df)
                 
-                logger.info(f"成功获取 {location['name']} 的天气数据")
+                logger.info(f"Successfully fetched weather for {location['name']}")
                 
             except Exception as e:
-                logger.error(f"获取 {location['name']} 天气数据失败: {e}")
+                logger.error(f"Failed to fetch {location['name']} weather data: {e}")
                 continue
         
         if not all_location_data:
-            raise ValueError("未能获取任何位置的天气数据")
+            raise ValueError("false to fetch weather data for any location")
         
-        # 合并并加权平均
+        # Combine and weight average
         combined_df = pd.concat(all_location_data, ignore_index=True)
         
-        # 按时间戳分组求和(因为已经加权)
+        # group by timestamp and sum weighted values
         result_df = combined_df.groupby('timestamp').agg({
             'temperature_2m': 'sum',
             'wind_speed_10m': 'sum',
@@ -106,29 +106,29 @@ class WeatherClient:
             'irradiance': 'sum'
         }).reset_index()
         
-        # 重命名列
+        # rename columns
         result_df = result_df.rename(columns={
             'temperature_2m': 'temperature_avg',
             'wind_speed_10m': 'wind_speed_10m_avg',
             'wind_speed_80m': 'wind_speed_80m_avg',
             'irradiance': 'irradiance_avg'
         })
-        
-        logger.info(f"天气数据加权平均完成,共 {len(result_df)} 条记录")
+
+        logger.info(f"weighted average completed, {len(result_df)} records")
         return result_df
     
     def fetch_historical(self, start_date: str, end_date: str) -> pd.DataFrame:
         """
-        获取历史天气数据(用于回填)
+        acure historical weather data
         
         Args:
-            start_date: 开始日期 'YYYY-MM-DD'
-            end_date: 结束日期 'YYYY-MM-DD'
-            
+            start_date: 'YYYY-MM-DD'
+            end_date: 'YYYY-MM-DD'
+
         Returns:
-            加权平均后的历史天气DataFrame
+            weighted average historical weather DataFrame
         """
-        logger.info(f"获取历史天气数据: {start_date} 到 {end_date}")
+        logger.info(f"Fetching historical weather data: {start_date} to {end_date}")
         
         all_location_data = []
         
@@ -165,16 +165,16 @@ class WeatherClient:
                     df[col] = df[col] * location['weight']
                 
                 all_location_data.append(df)
-                logger.info(f"成功获取 {location['name']} 的历史天气数据")
+                logger.info(f"successfully fetched historical weather data for {location['name']}")
                 
             except Exception as e:
-                logger.error(f"获取 {location['name']} 历史天气数据失败: {e}")
+                logger.error(f"Failed to fetch {location['name']} historical weather data: {e}")
                 continue
         
         if not all_location_data:
-            raise ValueError("未能获取任何位置的历史天气数据")
+            raise ValueError("not able to fetch historical weather data for any location")
         
-        # 合并并加权平均
+        # merge and weight average
         combined_df = pd.concat(all_location_data, ignore_index=True)
         result_df = combined_df.groupby('timestamp').agg({
             'temperature_2m': 'sum',
@@ -190,15 +190,15 @@ class WeatherClient:
             'irradiance': 'irradiance_avg'
         })
         
-        logger.info(f"历史天气数据加权平均完成,共 {len(result_df)} 条记录")
+        logger.info(f"historical weather data weighted average completed, {len(result_df)} records")
         return result_df
 
 
 def main():
-    """测试函数"""
+    """test weather client"""
     client = WeatherClient()
     
-    # 测试获取最近3天的预报
+    # Test fetch for the last 3 days forecast
     today = datetime.now().strftime('%Y-%m-%d')
     future = (datetime.now() + timedelta(days=3)).strftime('%Y-%m-%d')
     

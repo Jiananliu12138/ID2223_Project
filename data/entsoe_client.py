@@ -50,11 +50,19 @@ class ENTSOEClient:
                 end=end
             )
             
-            # 转换为DataFrame
-            df = pd.DataFrame({
-                'timestamp': prices.index,
-                'price': prices.values
-            })
+            # 转换为DataFrame - 使用 reset_index 避免长度不匹配问题
+            if isinstance(prices, pd.Series):
+                df = prices.reset_index()
+                df.columns = ['timestamp', 'price']
+            else:
+                # 如果是DataFrame，直接使用
+                df = prices.copy()
+                if 'timestamp' not in df.columns:
+                    df = df.reset_index()
+                    df.columns = ['timestamp', 'price']
+            
+            # 确保时间戳是 datetime 类型
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
             
             logger.info(f"成功获取 {len(df)} 条价格数据")
             return df
@@ -95,10 +103,18 @@ class ENTSOEClient:
                 # Series: 直接使用
                 load_values = load
             
-            df = pd.DataFrame({
-                'timestamp': load.index,
-                'load_forecast': load_values.values
-            })
+            # 使用 reset_index 避免长度不匹配问题
+            if isinstance(load_values, pd.Series):
+                df = load_values.reset_index()
+                df.columns = ['timestamp', 'load_forecast']
+            else:
+                df = pd.DataFrame({
+                    'timestamp': load_values.index,
+                    'load_forecast': load_values.values
+                })
+            
+            # 确保时间戳是 datetime 类型
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
             
             logger.info(f"成功获取 {len(df)} 条负载预测数据")
             return df
@@ -164,7 +180,17 @@ class ENTSOEClient:
                 logger.warning("未找到光伏数据，填充为0")
             
             # 重置索引并选择需要的列
-            result_df = result_df.reset_index().rename(columns={'index': 'timestamp'})
+            result_df = result_df.reset_index()
+            
+            # 自动识别时间列名
+            if 'index' in result_df.columns:
+                result_df = result_df.rename(columns={'index': 'timestamp'})
+            elif result_df.columns[0] != 'timestamp':
+                # 第一列就是时间戳
+                result_df = result_df.rename(columns={result_df.columns[0]: 'timestamp'})
+            
+            # 确保时间戳是 datetime 类型
+            result_df['timestamp'] = pd.to_datetime(result_df['timestamp'])
             result_df = result_df[['timestamp', 'wind_forecast', 'solar_forecast']]
             
             logger.info(f"成功获取 {len(result_df)} 条风光预测数据")
@@ -198,14 +224,20 @@ class ENTSOEClient:
         load_df = self.fetch_load_forecast(start, end)
         wind_solar_df = self.fetch_wind_solar_forecast(start, end)
         
+        # 记录数据形状
+        logger.info(f"数据形状: 价格={len(prices_df)}, 负载={len(load_df)}, 风光={len(wind_solar_df)}")
+        
         # 合并数据
         df = prices_df.merge(load_df, on='timestamp', how='left')
+        logger.info(f"价格+负载合并后: {len(df)} 条记录")
+        
         df = df.merge(wind_solar_df, on='timestamp', how='left')
+        logger.info(f"最终合并后: {len(df)} 条记录")
         
         # 填充缺失值（使用新版pandas语法）
         df = df.ffill().bfill()
         
-        logger.info(f"合并后共 {len(df)} 条记录")
+        logger.info(f"✅ 合并完成，共 {len(df)} 条记录")
         return df
 
 

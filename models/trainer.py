@@ -1,5 +1,5 @@
 """
-模型训练模块
+Model training module
 """
 import pandas as pd
 import numpy as np
@@ -15,14 +15,14 @@ logger = logging.getLogger(__name__)
 
 
 class ElectricityPriceModel:
-    """电力价格预测模型"""
+    """Electricity price prediction model"""
     
     def __init__(self, model_type: str = 'xgboost'):
         """
-        初始化模型
+        Initialize model
         
         Args:
-            model_type: 模型类型 ('xgboost' 或 'lightgbm')
+            model_type: Model type ('xgboost' or 'lightgbm')
         """
         self.model_type = model_type
         self.model = None
@@ -31,10 +31,10 @@ class ElectricityPriceModel:
         
     def get_default_params(self) -> dict:
         """
-        获取默认超参数
+        Get default hyperparameters
         
         Returns:
-            超参数字典
+            Dictionary of hyperparameters
         """
         if self.model_type == 'xgboost':
             return {
@@ -68,36 +68,36 @@ class ElectricityPriceModel:
                 'verbose': -1
             }
     
-    def train(self, 
-             X_train: pd.DataFrame, 
+    def train(self,
+             X_train: pd.DataFrame,
              y_train: pd.Series,
              X_val: pd.DataFrame = None,
              y_val: pd.Series = None,
              params: dict = None) -> None:
         """
-        训练模型
+        Train model
         
         Args:
-            X_train: 训练特征
-            y_train: 训练目标
-            X_val: 验证特征
-            y_val: 验证目标
-            params: 自定义超参数
+            X_train: Training features
+            y_train: Training target
+            X_val: Validation features
+            y_val: Validation target
+            params: Custom hyperparameters
         """
-        logger.info(f"开始训练 {self.model_type} 模型...")
-        logger.info(f"训练集大小: {len(X_train)}")
+        logger.info(f"Starting {self.model_type} model training...")
+        logger.info(f"Training set size: {len(X_train)}")
         if X_val is not None:
-            logger.info(f"验证集大小: {len(X_val)}")
+            logger.info(f"Validation set size: {len(X_val)}")
         
-        # 保存特征名
+        # Save feature names
         self.feature_names = X_train.columns.tolist()
         
-        # 获取参数
+        # Get parameters
         model_params = params if params else self.get_default_params()
         
-        # 训练模型
+        # Train model
         if self.model_type == 'xgboost':
-            # 如果有验证集，添加 early stopping 参数
+            # If validation set exists, add early stopping parameters
             if X_val is not None:
                 model_params['early_stopping_rounds'] = 50
             
@@ -137,38 +137,38 @@ class ElectricityPriceModel:
                 'importance': self.model.feature_importances_
             }).sort_values('importance', ascending=False)
         
-        logger.info("模型训练完成!")
-        logger.info(f"Top 10 重要特征:\n{self.feature_importance.head(10)}")
+        logger.info("Model training complete!")
+        logger.info(f"Top 10 important features:\n{self.feature_importance.head(10)}")
     
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         """
-        预测
+        Predict
         
         Args:
-            X: 特征DataFrame
+            X: Feature DataFrame
             
         Returns:
-            预测值数组
+            Array of predicted values
         """
         if self.model is None:
-            raise ValueError("模型未训练,请先调用train()方法")
+            raise ValueError("Model not trained, please call train() method first")
         
         return self.model.predict(X)
     
     def evaluate(self, X: pd.DataFrame, y: pd.Series) -> Dict[str, float]:
         """
-        评估模型
+        Evaluate model
         
         Args:
-            X: 特征
-            y: 真实值（可以是 Series 或 DataFrame）
+            X: Features
+            y: True values (can be Series or DataFrame)
             
         Returns:
-            评估指标字典
+            Dictionary of evaluation metrics
         """
         y_pred = self.predict(X)
         
-        # 确保 y 是 numpy array（处理 DataFrame 或 Series）
+        # Ensure y is numpy array (handle DataFrame or Series)
         if isinstance(y, pd.DataFrame):
             y_true = y.values.ravel()
         elif isinstance(y, pd.Series):
@@ -180,10 +180,10 @@ class ElectricityPriceModel:
             'MAE': mean_absolute_error(y_true, y_pred),
             'RMSE': np.sqrt(mean_squared_error(y_true, y_pred)),
             'R2': r2_score(y_true, y_pred),
-            'MAPE': np.mean(np.abs((y_true - y_pred) / np.maximum(y_true, 1e-8))) * 100  # 避免除零
+            'MAPE': np.mean(np.abs((y_true - y_pred) / np.maximum(y_true, 1e-8))) * 100  # Avoid division by zero
         }
         
-        logger.info("模型评估结果:")
+        logger.info("Model evaluation results:")
         for metric, value in metrics.items():
             logger.info(f"  {metric}: {value:.4f}")
         
@@ -191,13 +191,13 @@ class ElectricityPriceModel:
     
     def save_model(self, path: str) -> None:
         """
-        保存模型
+        Save model
         
         Args:
-            path: 保存路径
+            path: Save path
         """
         if self.model is None:
-            raise ValueError("模型未训练,无法保存")
+            raise ValueError("Model not trained, cannot save")
         
         model_data = {
             'model': self.model,
@@ -207,14 +207,14 @@ class ElectricityPriceModel:
         }
         
         joblib.dump(model_data, path)
-        logger.info(f"模型已保存到: {path}")
+        logger.info(f"Model saved to: {path}")
     
     def load_model(self, path: str) -> None:
         """
-        加载模型
+        Load model
         
         Args:
-            path: 模型路径
+            path: Model path
         """
         model_data = joblib.load(path)
         
@@ -223,42 +223,42 @@ class ElectricityPriceModel:
         self.feature_names = model_data['feature_names']
         self.feature_importance = model_data['feature_importance']
         
-        logger.info(f"模型已从 {path} 加载")
+        logger.info(f"Model loaded from: {path}")
 
 
-def prepare_training_data(df: pd.DataFrame, 
+def prepare_training_data(df: pd.DataFrame,
                          target_col: str = 'price') -> Tuple[pd.DataFrame, pd.Series]:
     """
-    准备训练数据
+    Prepare training data
     
     Args:
-        df: 完整DataFrame
-        target_col: 目标列名
+        df: Complete DataFrame
+        target_col: Target column name
         
     Returns:
-        (X, y) 特征和目标
+        (X, y) Features and target
     """
-    # 移除缺失目标值的行
+    # Remove rows with missing target values
     df = df.dropna(subset=[target_col])
     
-    # 分离特征和目标
+    # Separate features and target
     exclude_cols = [target_col, 'timestamp']
     feature_cols = [col for col in df.columns if col not in exclude_cols]
     
-    X = df[feature_cols].fillna(0)  # 填充剩余缺失值
+    X = df[feature_cols].fillna(0)  # Fill remaining missing values
     y = df[target_col]
     
-    logger.info(f"特征数量: {X.shape[1]}")
-    logger.info(f"样本数量: {X.shape[0]}")
+    logger.info(f"Number of features: {X.shape[1]}")
+    logger.info(f"Number of samples: {X.shape[0]}")
     
     return X, y
 
 
 def main():
-    """测试函数"""
+    """Test function"""
     from sklearn.model_selection import train_test_split
     
-    # 创建测试数据
+    # Create test data
     np.random.seed(42)
     n_samples = 1000
     
@@ -270,24 +270,24 @@ def main():
         'load': np.random.uniform(5000, 10000, n_samples)
     })
     
-    # 创建目标(带噪声的线性关系)
-    y = (X['feature_1'] * 10 + X['feature_2'] * 5 + 
-         X['hour'] * 2 + X['load'] * 0.01 + 
+    # Create target (linear relationship with noise)
+    y = (X['feature_1'] * 10 + X['feature_2'] * 5 +
+         X['hour'] * 2 + X['load'] * 0.01 +
          np.random.randn(n_samples) * 5)
     
-    # 分割数据
+    # Split data
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
     
-    # 训练模型
+    # Train model
     model = ElectricityPriceModel(model_type='xgboost')
     model.train(X_train, y_train, X_test, y_test)
     
-    # 评估
+    # Evaluate
     metrics = model.evaluate(X_test, y_test)
     
-    print(f"\n测试MAE: {metrics['MAE']:.2f}")
+    print(f"\nTest MAE: {metrics['MAE']:.2f}")
 
 
 if __name__ == "__main__":

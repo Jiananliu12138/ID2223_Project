@@ -1,6 +1,6 @@
 """
-推理管道
-获取最新特征,使用训练好的模型预测未来24小时电价
+Inference pipeline
+Fetches latest features and uses the trained model to predict the next 24 hours of electricity prices
 """
 import sys
 import os
@@ -24,28 +24,28 @@ logger = logging.getLogger(__name__)
 
 
 def run_inference():
-    """推理流程"""
+    """Inference flow"""
     logger.info(f"\n{'='*70}")
     logger.info(f"推理管道 - {datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"{'='*70}\n")
     
     try:
-        # 1. 连接Feature Store
+        # 1. Connect to Feature Store
         logger.info("步骤 1/6: 连接Feature Store...")
         fsm = FeatureStoreManager()
         
-        # 2. 从 Feature Groups 读取原始数据
+        # 2. Read raw data from Feature Groups
         logger.info("步骤 2/6: 从 Feature Groups 读取原始数据...")
         
-        # 获取包含历史数据的时间范围（需要历史数据来计算滞后特征）
+        # Determine the time range that includes historical data (needed for lag features)
         now = datetime.now(TIMEZONE)
-        # 获取过去7天到未来2天的数据（确保有足够的历史数据计算滞后特征）
+        # Fetch data from past 7 days to next 2 days (ensures enough history for lag features)
         start_time = now - timedelta(days=7)
         end_time = now + timedelta(days=2)
         
         logger.info(f"  时间范围: {start_time.strftime('%Y-%m-%d')} 到 {end_time.strftime('%Y-%m-%d')}")
         
-        # 从原始 Feature Groups 读取数据
+        # Read raw data from the Feature Groups
         df = fsm.read_raw_feature_groups(
             start_time=start_time.strftime('%Y-%m-%d %H:%M:%S'),
             end_time=end_time.strftime('%Y-%m-%d %H:%M:%S')
@@ -53,7 +53,7 @@ def run_inference():
         
         logger.info(f"  ✅ 读取了 {len(df)} 条原始记录")
         
-        # 3. 特征工程
+        # 3. Feature engineering
         logger.info("步骤 3/6: 特征工程...")
         logger.info(f"  原始特征数: {len(df.columns)}")
         
@@ -61,7 +61,7 @@ def run_inference():
         
         logger.info(f"  工程特征数: {len(df.columns)}")
         
-        # 将数据分为两部分：过去7天用于 backtest，未来2天用于 forecast
+        # Split data into two parts: past 7 days for backtest, next 2 days for forecast
         backtest_start = now - timedelta(days=7)
         backtest_end = now  # 不包含当前时刻
         forecast_start = now
@@ -69,19 +69,19 @@ def run_inference():
 
         logger.info(f"  将执行 backtest: {backtest_start} 到 {backtest_end} ，以及 forecast: {forecast_start} 到 {forecast_end}")
 
-        # 子集选择
+        # Subset selection
         backtest_df = df[(df['timestamp'] >= backtest_start) & (df['timestamp'] < backtest_end)].copy()
         forecast_df = df[(df['timestamp'] >= forecast_start) & (df['timestamp'] <= forecast_end)].copy()
 
         logger.info(f"  子集大小: backtest={len(backtest_df)}, forecast={len(forecast_df)}")
         
-        # 4. 加载模型
+        # 4. Load model
         logger.info("步骤 4/6: 加载模型...")
         
         model_path = f"models/{MODEL_NAME}.pkl"
         
         if not os.path.exists(model_path):
-            # 尝试从Hopsworks下载
+            # Try downloading from Hopsworks
             logger.info("  本地模型不存在,从Hopsworks下载...")
             mr = fsm.get_model_registry()
             model_obj = mr.get_model(MODEL_NAME, version=1)
@@ -91,7 +91,7 @@ def run_inference():
         model = ElectricityPriceModel()
         model.load_model(model_path)
         
-        # 5. 对两个子集分别执行数据清理和预测（backtest 与 forecast）并合并结果
+        # 5. Execute data cleaning and prediction on backtest and forecast subsets separately, then merge results
         logger.info("步骤 5/6: 分别对 backtest 与 forecast 执行数据清理和预测...")
 
         all_results = []
@@ -108,12 +108,12 @@ def run_inference():
                 logger.info(f"  跳过 {mode_label}: 没有可用数据")
                 continue
 
-            # 确保按时间排序
+            # Ensure chronological order
             subset = subset.sort_values('timestamp').reset_index(drop=True)
 
             timestamps = subset['timestamp'].copy()
 
-            # 移除非数值列
+            # Remove non-numeric columns
             exclude_cols = ['timestamp']
             cols_to_drop = [col for col in subset.columns if col in exclude_cols or subset[col].dtype == 'object']
 
@@ -123,7 +123,7 @@ def run_inference():
             else:
                 subset_clean = subset.copy()
 
-            # 检查缺失的特征并填充
+            # Check for missing features and fill them
             missing_features = set(feature_cols) - set(subset_clean.columns)
             if missing_features:
                 logger.warning(f"  [{mode_label}] ⚠️ 缺失特征: {missing_features}，将用0填充")
@@ -136,7 +136,7 @@ def run_inference():
             preds = model.predict(X_pred)
             logger.info(f"  [{mode_label}] ✅ 完成 {len(preds)} 个预测")
 
-            # 构建结果DataFrame
+            # Build result DataFrame
             res_df = pd.DataFrame({
                 'timestamp': timestamps,
                 'predicted_price': preds,
@@ -157,10 +157,10 @@ def run_inference():
         results_df = pd.concat(all_results, ignore_index=True).sort_values('timestamp').reset_index(drop=True)
         logger.info(f"  ✅ 合并后总共 {len(results_df)} 条预测结果")
         
-        # 6. 保存预测结果
+        # 6. Save prediction results
         logger.info("步骤 6/6: 保存预测结果...")
         
-        # 保存为JSON(供UI使用)
+        # Save as JSON (for UI use)
         output_dir = "predictions"
         os.makedirs(output_dir, exist_ok=True)
         
@@ -169,13 +169,13 @@ def run_inference():
             f"predictions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         )
         
-        # 转换为JSON格式
+        # Convert to JSON format
         results_json = results_df.to_dict(orient='records')
         
         with open(output_file, 'w') as f:
             json.dump(results_json, f, indent=2, default=str)
         
-        # 同时保存最新预测(覆盖)
+        # Also save the latest predictions (overwrite)
         latest_file = os.path.join(output_dir, "latest_predictions.json")
         with open(latest_file, 'w') as f:
             json.dump(results_json, f, indent=2, default=str)
@@ -194,7 +194,7 @@ def run_inference():
             mae = results_df['abs_error'].mean()
             logger.info(f"  ✅ MAE（与实际价格对比）: {mae:.2f} EUR/MWh")
         
-        # 找到最便宜的4小时时段(用于"洗衣计时器")
+        # Find the cheapest 4-hour window (for "laundry timer" feature)
         logger.info(f"\n💡 最便宜的4小时（推荐用电时段）:")
         cheapest_hours = results_df.nsmallest(4, 'predicted_price')
         for _, row in cheapest_hours.iterrows():
@@ -217,7 +217,7 @@ def run_inference():
 
 
 def main():
-    """主函数"""
+    """Main function"""
     success = run_inference()
     
     if success:

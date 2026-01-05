@@ -1,6 +1,6 @@
 """
-每日特征更新管道
-在每天13:30 CET运行,获取最新发布的次日价格和预测数据
+Daily feature update pipeline
+Runs every day at 13:30 CET to fetch the latest published day-ahead prices and forecasts
 """
 import sys
 import os
@@ -73,14 +73,14 @@ def normalize_dataframe_timestamps(df: pd.DataFrame, time_col: str = 'timestamp'
 
 def daily_update():
     """
-    每日更新流程
-    获取昨天和今天的数据(确保不遗漏)
+    Daily update flow
+    Fetches data from yesterday through tomorrow (to ensure coverage)
     """
     logger.info(f"\n{'='*60}")
     logger.info(f"每日特征更新 - {datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"{'='*60}\n")
     
-    # 计算时间范围(获取昨天到明天的数据)
+    # Compute time range (fetch yesterday through tomorrow)
     today = datetime.now(TIMEZONE)
     start_date = (today - timedelta(days=1)).strftime('%Y-%m-%d')
     end_date = (today + timedelta(days=1)).strftime('%Y-%m-%d')
@@ -104,21 +104,21 @@ def daily_update():
         weather_df = weather_client.fetch_forecast(start_date, end_date)
         logger.info(f"  - 获取了 {len(weather_df)} 条天气数据")
         
-        # 4. 合并数据
+        # 4. Merge data
         logger.info("步骤 4/6: 合并数据...")
 
-        # 统一并标准化时间列：安全地本地化到配置时区，然后转换为 UTC，去重
+        # Normalize and standardize time columns: safely localize to configured timezone, convert to UTC, and deduplicate
         market_df = normalize_dataframe_timestamps(market_df, time_col='timestamp', tz=TIMEZONE, name='市场数据')
         weather_df = normalize_dataframe_timestamps(weather_df, time_col='timestamp', tz=TIMEZONE, name='天气数据')
 
         merged_df = market_df.merge(weather_df, on='timestamp', how='left')
         logger.info(f"  - 合并后共 {len(merged_df)} 条记录")
         
-        # 5. 数据清洗
+        # 5. Data cleaning
         logger.info("步骤 5/6: 数据清洗...")
         cleaned_df = DataCleaner.clean_pipeline(merged_df)
         
-        # 将内部统一的 UTC timestamp 转回展示用的本地时区 (Europe/Stockholm)
+        # Convert internal UTC timestamps back to the display timezone (Europe/Stockholm)
         try:
             # 如果为 tz-aware（例如 UTC），直接转换；否则先 localize 到 UTC 再转换
             if cleaned_df['timestamp'].dt.tz is None:
@@ -129,10 +129,10 @@ def daily_update():
         except Exception as e:
             logger.warning("转换合并后时间戳到 %s 时区失败: %s。保留原始时间戳。", TIMEZONE, e)
         
-        # 6. 上传到Feature Store
+        # 6. Upload to Feature Store
         logger.info("步骤 6/6: 上传到Feature Store...")
         
-        # 分离数据
+        # Split data
         electricity_cols = ['timestamp', 'price', 'load_forecast', 
                           'wind_forecast', 'solar_forecast']
         weather_cols = ['timestamp', 'temperature_avg', 'wind_speed_10m_avg',
@@ -141,12 +141,12 @@ def daily_update():
         electricity_df = cleaned_df[electricity_cols]
         weather_df = cleaned_df[weather_cols]
         
-        # 上传(使用upsert避免重复)
+        # Upload (use upsert to avoid duplicates)
         fsm.create_electricity_feature_group(electricity_df)
         fsm.create_weather_feature_group(weather_df)
         
         logger.info(f"\n{'='*60}")
-        logger.info("✅ 每日更新成功!")
+        logger.info("每日更新成功!")
         logger.info(f"  - 电力数据: {len(electricity_df)} 条")
         logger.info(f"  - 天气数据: {len(weather_df)} 条")
         logger.info(f"  - 更新时间: {datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')}")
@@ -156,7 +156,7 @@ def daily_update():
         
     except Exception as e:
         logger.error(f"\n{'='*60}")
-        logger.error(f"❌ 每日更新失败!")
+        logger.error(f"每日更新失败!")
         logger.error(f"错误信息: {e}")
         logger.error(f"{'='*60}\n")
         
@@ -167,7 +167,7 @@ def daily_update():
 
 
 def main():
-    """主函数"""
+    """Main function"""
     success = daily_update()
     
     if success:

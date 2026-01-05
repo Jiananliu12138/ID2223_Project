@@ -50,11 +50,20 @@ class ENTSOEClient:
                 end=end
             )
             
-            # 转换为DataFrame
-            df = pd.DataFrame({
-                'timestamp': prices.index,
-                'price': prices.values
-            })
+            # 使用 to_frame() 或 reset_index() - 不手动构造字典
+            # 这样可以避免 index 和 values 长度不匹配的问题
+            if isinstance(prices, pd.Series):
+                df = prices.to_frame(name='price').reset_index()
+                df.columns = ['timestamp', 'price']
+            else:
+                # 如果是 DataFrame
+                df = prices.reset_index()
+                if len(df.columns) == 2:
+                    df.columns = ['timestamp', 'price']
+                else:
+                    # 多列的情况，取第一个数值列
+                    df = df.iloc[:, [0, 1]]
+                    df.columns = ['timestamp', 'price']
             
             logger.info(f"成功获取 {len(df)} 条价格数据")
             return df
@@ -91,14 +100,14 @@ class ENTSOEClient:
                 else:
                     load_values = load.mean(axis=1)
                     logger.info(f"负载预测有 {load.shape[1]} 列，使用平均值")
+                
+                # 使用 to_frame() 避免长度不匹配
+                df = load_values.to_frame(name='load_forecast').reset_index()
+                df.columns = ['timestamp', 'load_forecast']
             else:
-                # Series: 直接使用
-                load_values = load
-            
-            df = pd.DataFrame({
-                'timestamp': load.index,
-                'load_forecast': load_values.values
-            })
+                # Series: 使用 to_frame()
+                df = load.to_frame(name='load_forecast').reset_index()
+                df.columns = ['timestamp', 'load_forecast']
             
             logger.info(f"成功获取 {len(df)} 条负载预测数据")
             return df
@@ -164,7 +173,10 @@ class ENTSOEClient:
                 logger.warning("未找到光伏数据，填充为0")
             
             # 重置索引并选择需要的列
-            result_df = result_df.reset_index().rename(columns={'index': 'timestamp'})
+            result_df = result_df.reset_index()
+            # 确保第一列是时间戳
+            if result_df.columns[0] != 'timestamp':
+                result_df = result_df.rename(columns={result_df.columns[0]: 'timestamp'})
             result_df = result_df[['timestamp', 'wind_forecast', 'solar_forecast']]
             
             logger.info(f"成功获取 {len(result_df)} 条风光预测数据")

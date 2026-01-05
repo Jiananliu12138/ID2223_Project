@@ -69,7 +69,9 @@ def load_predictions():
         
         df = pd.DataFrame(data)
         df['timestamp'] = pd.to_datetime(df['timestamp'])
-        
+        # Ensure timestamps are sorted so line charts draw smoothly
+        df = df.sort_values('timestamp').reset_index(drop=True)
+
         return df
     except Exception as e:
         st.error(f"加载预测数据失败: {e}")
@@ -78,21 +80,23 @@ def load_predictions():
 
 def plot_price_comparison(df: pd.DataFrame):
     """绘制价格对比图表"""
+    # Use a sorted copy so lines follow time order
+    df_sorted = df.sort_values('timestamp')
     fig = go.Figure()
-    
-    # 预测价格
+
+    # Predicted price
     fig.add_trace(go.Scatter(
-        x=df['timestamp'],
-        y=df['predicted_price'],
+        x=df_sorted['timestamp'],
+        y=df_sorted['predicted_price'],
         mode='lines+markers',
         name='预测价格',
         line=dict(color='#1f77b4', width=2),
         marker=dict(size=6)
     ))
-    
-    # 实际价格(如果存在)
-    if 'actual_price' in df.columns:
-        actual_df = df.dropna(subset=['actual_price'])
+
+    # Actual price (if available)
+    if 'actual_price' in df_sorted.columns:
+        actual_df = df_sorted.dropna(subset=['actual_price'])
         if len(actual_df) > 0:
             fig.add_trace(go.Scatter(
                 x=actual_df['timestamp'],
@@ -123,7 +127,10 @@ def plot_hourly_heatmap(df: pd.DataFrame):
     
     # 透视表
     pivot = df.pivot(index='date', columns='hour', values='predicted_price')
-    
+    # Ensure rows and columns are in chronological order
+    pivot = pivot.sort_index()
+    pivot = pivot.reindex(sorted(pivot.columns), axis=1)
+
     fig = go.Figure(data=go.Heatmap(
         z=pivot.values,
         x=pivot.columns,

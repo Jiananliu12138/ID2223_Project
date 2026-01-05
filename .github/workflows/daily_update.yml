@@ -1,30 +1,32 @@
-name: Daily Feature Update
+name: Daily Feature and Inference Pipeline
 
 on:
+  workflow_dispatch: # 允许手动触发
   schedule:
-    # 每天12:30 UTC (13:30 CET)运行
-    - cron: "30 12 * * *"
-
-  # 允许手动触发
-  workflow_dispatch:
+    # 每天13:00 UTC (14:00 CET, 日前电价公布后)运行
+    - cron: "0 13 * * *"
 
 jobs:
-  update-features:
+  daily_prediction:
     runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      contents: write
 
     steps:
       - name: Checkout代码
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: 设置Python环境
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.10"
           cache: "pip"
 
-      - name: 安装依赖
+      - name: 安装Python依赖
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: 运行每日特征管道
@@ -35,14 +37,28 @@ jobs:
         run: |
           python pipelines/2_daily_feature_pipeline.py
 
-      - name: 发送通知(如果失败)
-        if: failure()
-        uses: dawidd6/action-send-mail@v3
+      - name: 运行推理管道
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          HOPSWORKS_PROJECT_NAME: ${{ secrets.HOPSWORKS_PROJECT_NAME }}
+        run: |
+          python pipelines/4_inference_pipeline.py
+
+      - name: 提交预测结果
+        uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          server_address: smtp.gmail.com
-          server_port: 465
-          username: ${{ secrets.EMAIL_USERNAME }}
-          password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: 每日特征管道失败告警
-          body: 特征管道执行失败,请检查日志
-          to: ${{ secrets.NOTIFICATION_EMAIL }}
+          commit_message: "Daily electricity price predictions updated"
+          commit_options: "--no-verify --signoff"
+          file_pattern: "predictions/*.json"
+          repository: .
+          status_options: "--untracked-files=no"
+          skip_dirty_check: true
+          skip_fetch: true
+          skip_checkout: true
+          push_options: "--force"
+
+      - name: 发送失败通知
+        if: failure()
+        run: |
+          echo "❌ 每日管道执行失败，请检查日志"
+          echo "失败时间: $(date)"

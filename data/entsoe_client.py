@@ -33,39 +33,48 @@ class ENTSOEClient:
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
     def fetch_day_ahead_prices(self, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
         """
-        获取日前市场价格
-        
-        Args:
-            start: 开始时间(aware timezone)
-            end: 结束时间(aware timezone)
-            
-        Returns:
-            DataFrame with columns: timestamp, price
+        获取日前市场价格 - 采用分段获取策略以绕过 entsoe-py 内部长度不匹配错误
         """
         try:
             logger.info(f"获取日前价格: {start} 到 {end}")
-            prices = self.client.query_day_ahead_prices(
-                self.bidding_zone, 
-                start=start, 
-                end=end
-            )
             
-            # 转换为DataFrame - 最安全的方式
-            if isinstance(prices, (pd.Series, pd.DataFrame)):
-                # 先重置索引，将时间戳变为一列
-                df = prices.reset_index()
-                # 无论原来叫什么（'index', 'MTU', 'timestamp'），统一重命名
-                df.columns = ['timestamp', 'price'] if df.shape[1] == 2 else ['timestamp'] + [f'price_{i}' for i in range(df.shape[1]-1)]
-                # 如果有多列价格，取第一列
-                if df.shape[1] > 2:
-                    df = df[['timestamp', df.columns[1]]].rename(columns={df.columns[1]: 'price'})
-            else:
-                raise ValueError(f"返回了意外的数据类型: {type(prices)}")
+            # 如果跨度超过1天，采用逐日获取策略
+            all_dfs = []
+            current_start = start
             
-            # 确保时间戳是 datetime 类型
+            while current_start < end:
+                # 每次取 24 小时
+                current_end = min(current_start + pd.Timedelta(days=1), end)
+                
+                try:
+                    prices = self.client.query_day_ahead_prices(
+                        self.bidding_zone, 
+                        start=current_start, 
+                        end=current_end
+                    )
+                    
+                    if isinstance(prices, (pd.Series, pd.DataFrame)):
+                        temp_df = prices.reset_index()
+                        temp_df.columns = ['timestamp', 'price'] if temp_df.shape[1] == 2 else ['timestamp'] + [f'price_{i}' for i in range(temp_df.shape[1]-1)]
+                        if temp_df.shape[1] > 2:
+                            temp_df = temp_df[['timestamp', temp_df.columns[1]]].rename(columns={temp_df.columns[1]: 'price'})
+                        all_dfs.append(temp_df)
+                except Exception as day_e:
+                    logger.warning(f"  ⚠️ 获取时段 {current_start} 数据失败: {day_e}，跳过该时段")
+                
+                current_start = current_end
+
+            if not all_dfs:
+                raise ValueError("未能获取到任何价格数据")
+                
+            # 合并所有片段并去重
+            df = pd.concat(all_dfs, ignore_index=True)
             df['timestamp'] = pd.to_datetime(df['timestamp'])
             
-            logger.info(f"成功获取 {len(df)} 条价格数据")
+            # 核心步骤：彻底去重并按时间排序
+            df = df.drop_duplicates(subset=['timestamp']).sort_values('timestamp')
+            
+            logger.info(f"成功获取 {len(df)} 条价格数据 (已去重)")
             return df
             
         except Exception as e:
@@ -75,43 +84,45 @@ class ENTSOEClient:
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
     def fetch_load_forecast(self, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
         """
-        获取总负载预测
-        
-        Args:
-            start: 开始时间
-            end: 结束时间
-            
-        Returns:
-            DataFrame with columns: timestamp, load_forecast
+        获取总负载预测 - 采用分段获取策略
         """
         try:
             logger.info(f"获取负载预测: {start} 到 {end}")
-            load = self.client.query_load_forecast(
-                self.bidding_zone,
-                start=start,
-                end=end
-            )
             
-            # 处理DataFrame和Series两种情况
-            if isinstance(load, pd.DataFrame):
-                # 如果是多列（如不同的预测版本），取平均值
-                if load.shape[1] > 1:
-                    load = load.mean(axis=1)
-                    logger.info("负载预测有多个版本，已取平均值")
+            all_dfs = []
+            current_start = start
             
-            # 使用 reset_index 转换为 DataFrame
-            df = load.reset_index()
-            df.columns = ['timestamp', 'load_forecast']
-            
-            # 确保时间戳是 datetime 类型
+            while current_start < end:
+                current_end = min(current_start + pd.Timedelta(days=1), end)
+                
+                try:
+                    load = self.client.query_load_forecast(
+                        self.bidding_zone,
+                        start=current_start,
+                        end=current_end
+                    )
+                    
+                    if isinstance(load, pd.DataFrame):
+                        if load.shape[1] > 1:
+                            load = load.mean(axis=1)
+                    
+                    temp_df = load.reset_index()
+                    temp_df.columns = ['timestamp', 'load_forecast']
+                    all_dfs.append(temp_df)
+                except Exception as day_e:
+                    logger.warning(f"  ⚠️ 获取时段 {current_start} 负载失败: {day_e}")
+                
+                current_start = current_end
+
+            if not all_dfs:
+                raise ValueError("未能获取到任何负载预测数据")
+
+            df = pd.concat(all_dfs, ignore_index=True)
             df['timestamp'] = pd.to_datetime(df['timestamp'])
+            df = df.drop_duplicates(subset=['timestamp']).sort_values('timestamp')
             
-            logger.info(f"成功获取 {len(df)} 条负载预测数据")
+            logger.info(f"成功获取 {len(df)} 条负载预测数据 (已去重)")
             return df
-            
-        except Exception as e:
-            logger.error(f"获取负载预测失败: {e}")
-            raise
     
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
     def fetch_wind_solar_forecast(self, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:

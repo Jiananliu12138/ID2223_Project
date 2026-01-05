@@ -16,7 +16,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # 页面配置
 st.set_page_config(
-    page_title="SE3电力价格预测",
+    page_title="SE3 Electricity Price Prediction",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -59,7 +59,9 @@ st.markdown("""
 def load_predictions():
     """加载最新预测数据"""
     try:
-        pred_file = "../predictions/latest_predictions.json"
+        # Use an absolute path relative to this file so Streamlit working dir doesn't matter
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        pred_file = os.path.join(base_dir, 'predictions', 'latest_predictions.json')
         
         if not os.path.exists(pred_file):
             return None
@@ -69,7 +71,9 @@ def load_predictions():
         
         df = pd.DataFrame(data)
         df['timestamp'] = pd.to_datetime(df['timestamp'])
-        
+        # Ensure timestamps are sorted so line charts draw smoothly
+        df = df.sort_values('timestamp').reset_index(drop=True)
+
         return df
     except Exception as e:
         st.error(f"加载预测数据失败: {e}")
@@ -78,41 +82,90 @@ def load_predictions():
 
 def plot_price_comparison(df: pd.DataFrame):
     """绘制价格对比图表"""
+    # Use a sorted copy so lines follow time order
+    df_sorted = df.sort_values('timestamp').reset_index(drop=True)
+
+    # Base (neutral) line to ensure a continuous timeline
     fig = go.Figure()
-    
-    # 预测价格
     fig.add_trace(go.Scatter(
-        x=df['timestamp'],
-        y=df['predicted_price'],
-        mode='lines+markers',
-        name='预测价格',
-        line=dict(color='#1f77b4', width=2),
-        marker=dict(size=6)
+        x=df_sorted['timestamp'],
+        y=df_sorted['predicted_price'],
+        mode='lines',
+        name='Predicted (base)',
+        line=dict(color='lightgray', width=2),
+        hoverinfo='skip',
+        showlegend=False
     ))
-    
-    # 实际价格(如果存在)
-    if 'actual_price' in df.columns:
-        actual_df = df.dropna(subset=['actual_price'])
+
+    # Colored segments for backtest and forecast by masking values to NaN outside mode
+    if 'mode' in df_sorted.columns:
+        back_y = [v if m == 'backtest' else None for v, m in zip(df_sorted['predicted_price'], df_sorted['mode'])]
+        fcast_y = [v if m == 'forecast' else None for v, m in zip(df_sorted['predicted_price'], df_sorted['mode'])]
+
+        fig.add_trace(go.Scatter(
+            x=df_sorted['timestamp'],
+            y=back_y,
+            mode='lines+markers',
+            name='Backtest',
+            line=dict(color='#636EFA', width=3),
+            marker=dict(size=6)
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=df_sorted['timestamp'],
+            y=fcast_y,
+            mode='lines+markers',
+            name='Forecast',
+            line=dict(color='#EF553B', width=3),
+            marker=dict(size=6)
+        ))
+    else:
+        # Fallback: single color if no mode column
+        fig.add_trace(go.Scatter(
+            x=df_sorted['timestamp'],
+            y=df_sorted['predicted_price'],
+            mode='lines+markers',
+            name='Predicted Price',
+            line=dict(color='#1f77b4', width=2),
+            marker=dict(size=6)
+        ))
+
+    # Actual price (if available) as a separate trace
+    if 'actual_price' in df_sorted.columns:
+        actual_df = df_sorted.dropna(subset=['actual_price'])
         if len(actual_df) > 0:
             fig.add_trace(go.Scatter(
                 x=actual_df['timestamp'],
                 y=actual_df['actual_price'],
                 mode='lines+markers',
-                name='实际价格',
-                line=dict(color='#ff7f0e', width=2),
+                name='Actual Price',
+                line=dict(color='#00CC96', width=2, dash='dash'),
                 marker=dict(size=6)
             ))
     
     fig.update_layout(
-        title='SE3区域电力价格预测',
-        xaxis_title='时间',
-        yaxis_title='价格 (EUR/MWh)',
+        title='SE3 Region Electricity Price Prediction',
+        xaxis_title='Time',
+        yaxis_title='Price (EUR/MWh)',
         hovermode='x unified',
         height=500,
         template='plotly_white'
     )
     
     return fig
+
+
+def select_display_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Select which subset to display in the main UI.
+
+    - If the predictions contain a 'mode' column and there are 'forecast' rows,
+      prefer showing only the forecast records (future predictions).
+    - Otherwise, return the full dataframe (maintains backward compatibility).
+    """
+    if 'mode' in df.columns:
+        if (df['mode'] == 'forecast').any():
+            return df[df['mode'] == 'forecast'].copy()
+    return df
 
 
 def plot_hourly_heatmap(df: pd.DataFrame):
@@ -123,7 +176,10 @@ def plot_hourly_heatmap(df: pd.DataFrame):
     
     # 透视表
     pivot = df.pivot(index='date', columns='hour', values='predicted_price')
-    
+    # Ensure rows and columns are in chronological order
+    pivot = pivot.sort_index()
+    pivot = pivot.reindex(sorted(pivot.columns), axis=1)
+
     fig = go.Figure(data=go.Heatmap(
         z=pivot.values,
         x=pivot.columns,
@@ -133,9 +189,9 @@ def plot_hourly_heatmap(df: pd.DataFrame):
     ))
     
     fig.update_layout(
-        title='每小时价格热力图',
-        xaxis_title='小时',
-        yaxis_title='日期',
+        title='Hourly Price Heatmap',
+        xaxis_title='Hour',
+        yaxis_title='Date',
         height=400
     )
     
@@ -144,21 +200,33 @@ def plot_hourly_heatmap(df: pd.DataFrame):
 
 def display_laundry_ticker(df: pd.DataFrame):
     """显示"洗衣计时器" - 最便宜的用电时段"""
-    st.markdown('<div class="sub-header">🧺 洗衣计时器 - 最佳用电时段</div>', 
+    st.markdown('<div class="sub-header">🧺 Best period for laundry</div>', 
                 unsafe_allow_html=True)
-    
-    # 找出最便宜的4小时
-    cheapest = df.nsmallest(4, 'predicted_price').sort_values('timestamp')
-    
-    st.info("💡 以下是未来24小时内电价最低的4个时段,适合运行洗衣机、烘干机等高耗电设备!")
+    # 限定在未来24小时内查找最便宜的4小时（优先展示未来时段）
+    try:
+        now = pd.Timestamp.now(tz='UTC')
+        window_end = now + pd.Timedelta(hours=24)
+        future_window = df[(df['timestamp'] >= now) & (df['timestamp'] <= window_end)]
+    except Exception:
+        # 回退：如果时间比较失败，则使用全部数据
+        future_window = df
+
+    # 在未来24小时内选最便宜的4个时段；如果未来24小时没有数据，则退回到全数据选取
+    if len(future_window) >= 4:
+        cheapest = future_window.nsmallest(4, 'predicted_price').reset_index(drop=True)
+    else:
+        cheapest = df.nsmallest(4, 'predicted_price').reset_index(drop=True)
+
+    st.info("💡 Below is the cheapest 4-hour period for laundry.")
     
     cols = st.columns(4)
     
+    # cheapest 已按价格升序排列，序号即为价格排名
     for idx, (_, row) in enumerate(cheapest.iterrows()):
         with cols[idx]:
             st.markdown(f"""
             <div class="metric-card">
-                <h3 style="color: #28a745; margin: 0;">排名 #{idx+1}</h3>
+                <h3 style="color: #28a745; margin: 0;">Ranked #{idx+1}</h3>
                 <p style="font-size: 18px; margin: 10px 0;">
                     <strong>{row['timestamp'].strftime('%m-%d %H:%M')}</strong>
                 </p>
@@ -175,37 +243,37 @@ def display_metrics(df: pd.DataFrame):
     
     with col1:
         avg_price = df['predicted_price'].mean()
-        st.metric("平均电价", f"{avg_price:.2f} EUR/MWh")
+        st.metric("Average Price", f"{avg_price:.2f} EUR/MWh")
     
     with col2:
         min_price = df['predicted_price'].min()
-        st.metric("最低电价", f"{min_price:.2f} EUR/MWh", 
+        st.metric("Lowest Price", f"{min_price:.2f} EUR/MWh", 
                  delta=f"{min_price - avg_price:.2f}")
     
     with col3:
         max_price = df['predicted_price'].max()
-        st.metric("最高电价", f"{max_price:.2f} EUR/MWh",
+        st.metric("Highest Price", f"{max_price:.2f} EUR/MWh",
                  delta=f"{max_price - avg_price:.2f}")
     
     with col4:
         if 'actual_price' in df.columns:
             mae = df.dropna(subset=['actual_price'])['abs_error'].mean()
-            st.metric("预测误差 (MAE)", f"{mae:.2f} EUR/MWh")
+            st.metric("Prediction Error (MAE)", f"{mae:.2f} EUR/MWh")
         else:
-            st.metric("数据状态", "✅ 已更新")
+            st.metric("Data Status", "✅ Updated")
 
 
 def main():
     """主函数"""
     # 标题
-    st.markdown('<div class="main-header">⚡ SE3电力价格预测系统</div>', 
+    st.markdown('<div class="main-header">⚡ Electricity Price Prediction System for SE3</div>', 
                 unsafe_allow_html=True)
     
     st.markdown("""
     <div style="text-align: center; color: #666; margin-bottom: 30px;">
-        实时预测斯德哥尔摩地区(SE3)的日前电力市场价格 | 
-        基于XGBoost机器学习模型 | 
-        由Hopsworks Feature Store驱动
+        Real-time prediction of SE3 electricity prices | 
+        Powered by XGBoost machine learning model | 
+        Driven by Hopsworks Feature Store
     </div>
     """, unsafe_allow_html=True)
     
@@ -213,25 +281,26 @@ def main():
     with st.sidebar:
         st.image("https://upload.wikimedia.org/wikipedia/commons/4/4c/Flag_of_Sweden.svg", 
                 width=100)
-        st.title("📊 控制面板")
+        st.title("📊 Dashboard")
         
         st.info("""
-        **关于本系统**
-        
-        本系统使用机器学习预测瑞典SE3区域的电力价格,帮助用户:
-        
-        - 📈 了解未来24小时电价趋势
-        - 💰 找到最便宜的用电时段
-        - ⚡ 优化高耗电设备使用时间
-        - 🌍 支持可再生能源消纳
+        About This System
+
+This system uses machine learning to predict electricity prices in Sweden's SE3 region, helping users:
+
+📈 Understand electricity price trends for the next 24 hours
+
+💰 Find the cheapest periods to use electricity
+
+⚡ Optimize the timing for running high‑power appliances (e.g., washers, dryers)
         """)
         
-        if st.button("🔄 刷新数据"):
+        if st.button("🔄 Refresh"):
             st.cache_data.clear()
             st.rerun()
         
         st.markdown("---")
-        st.markdown("**数据来源:**")
+        st.markdown("**Data Source:**")
         st.markdown("- ENTSO-E Transparency Platform")
         st.markdown("- Open-Meteo Weather API")
         
@@ -244,9 +313,9 @@ def main():
         return
     
     # 显示最后更新时间
-    st.success(f"📅 最后更新: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    st.success(f"📅 Last Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # 关键指标
+    # 关键指标（展示全部数据）
     display_metrics(df)
     
     st.markdown("---")
@@ -264,18 +333,18 @@ def main():
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("📊 价格分布")
+        st.subheader("📊 Price Distribution")
         fig_hist = px.histogram(
             df, 
             x='predicted_price',
             nbins=20,
-            title='预测价格分布',
-            labels={'predicted_price': '价格 (EUR/MWh)', 'count': '频次'}
+            title='Predicted Price Distribution',
+            labels={'predicted_price': 'price (EUR/MWh)', 'count': 'frequency'}
         )
         st.plotly_chart(fig_hist, use_container_width=True)
     
     with col2:
-        st.subheader("🕐 按小时统计")
+        st.subheader("🕐 Hourly Statistics")
         df['hour'] = df['timestamp'].dt.hour
         hourly_avg = df.groupby('hour')['predicted_price'].mean().reset_index()
         
@@ -283,15 +352,22 @@ def main():
             hourly_avg,
             x='hour',
             y='predicted_price',
-            title='各小时平均价格',
+            title='Average Price by Hour',
             labels={'hour': '小时', 'predicted_price': '平均价格 (EUR/MWh)'}
         )
         st.plotly_chart(fig_hourly, use_container_width=True)
     
     # 数据表
-    with st.expander("📋 查看详细数据"):
+    with st.expander("📋 Details"):
+        # Show full table including mode if present
+        cols = ['timestamp', 'predicted_price']
+        if 'mode' in df.columns:
+            cols.append('mode')
+        if 'actual_price' in df.columns:
+            cols.append('actual_price')
+
         st.dataframe(
-            df[['timestamp', 'predicted_price']].style.format({
+            df[cols].style.format({
                 'predicted_price': '{:.2f}'
             }),
             use_container_width=True

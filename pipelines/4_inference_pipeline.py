@@ -61,24 +61,19 @@ def run_inference():
         
         logger.info(f"  工程特征数: {len(df.columns)}")
         
-        # 检查是否有未来数据
-        future_data = df[df['timestamp'] >= now].copy()
-        
-        if len(future_data) > 0:
-            # 有未来数据，用于真实预测
-            df = future_data
-            prediction_mode = "forecast"
-            logger.info(f"  ✅ 使用未来数据: {len(df)} 条（真实预测模式）")
-        else:
-            # 没有未来数据，使用最新的24小时数据（演示/回测模式）
-            prediction_mode = "backtest"
-            logger.warning("  ⚠️  没有未来数据，切换到演示/回测模式")
-            logger.info("  💡 使用最新的24小时历史数据来展示模型预测能力")
-            logger.info("  💡 若要真实预测，请先运行: python pipelines/2_daily_feature_pipeline.py")
-            
-            # 使用最新的24条记录
-            df = df.tail(24).copy()
-            logger.info(f"  ✅ 使用最新历史数据: {len(df)} 条（演示模式）")
+        # 将数据分为两部分：过去7天用于 backtest，未来2天用于 forecast
+        backtest_start = now - timedelta(days=7)
+        backtest_end = now  # 不包含当前时刻
+        forecast_start = now
+        forecast_end = now + timedelta(days=2)
+
+        logger.info(f"  将执行 backtest: {backtest_start} 到 {backtest_end} ，以及 forecast: {forecast_start} 到 {forecast_end}")
+
+        # 子集选择
+        backtest_df = df[(df['timestamp'] >= backtest_start) & (df['timestamp'] < backtest_end)].copy()
+        forecast_df = df[(df['timestamp'] >= forecast_start) & (df['timestamp'] <= forecast_end)].copy()
+
+        logger.info(f"  子集大小: backtest={len(backtest_df)}, forecast={len(forecast_df)}")
         
         # 4. 加载模型
         logger.info("步骤 4/6: 加载模型...")
@@ -96,55 +91,71 @@ def run_inference():
         model = ElectricityPriceModel()
         model.load_model(model_path)
         
-        # 5. 数据清理和预测
-        logger.info("步骤 5/6: 数据清理和执行预测...")
-        
-        # 保存 timestamp 用于结果
-        timestamps = df['timestamp'].copy()
-        
-        # 移除非数值列
-        exclude_cols = ['timestamp']
-        cols_to_drop = [col for col in df.columns if col in exclude_cols or df[col].dtype == 'object']
-        
-        if cols_to_drop:
-            logger.info(f"  移除列: {cols_to_drop}")
-            df_clean = df.drop(columns=cols_to_drop)
-        else:
-            df_clean = df.copy()
-        
-        # 准备预测数据（确保特征顺序与训练时一致）
+        # 5. 对两个子集分别执行数据清理和预测（backtest 与 forecast）并合并结果
+        logger.info("步骤 5/6: 分别对 backtest 与 forecast 执行数据清理和预测...")
+
+        all_results = []
+
+        tasks = [
+            ("backtest", backtest_df),
+            ("forecast", forecast_df)
+        ]
+
         feature_cols = model.feature_names
-        
-        # 检查缺失的特征
-        missing_features = set(feature_cols) - set(df_clean.columns)
-        if missing_features:
-            logger.warning(f"  ⚠️  缺失特征: {missing_features}")
-            logger.warning("  将用0填充缺失特征")
-            for feat in missing_features:
-                df_clean[feat] = 0
-        
-        X_pred = df_clean[feature_cols].fillna(0)
-        logger.info(f"  ✅ 预测特征: {len(feature_cols)} 个")
-        
-        # 执行预测
-        predictions = model.predict(X_pred)
-        logger.info(f"  ✅ 完成 {len(predictions)} 个预测")
-        
-        # 创建预测结果DataFrame
-        results_df = pd.DataFrame({
-            'timestamp': timestamps,
-            'predicted_price': predictions,
-            'mode': prediction_mode  # 添加模式标识
-        })
-        
-        # 如果有实际价格,添加对比
-        if 'price' in df.columns:
-            results_df['actual_price'] = df['price'].values
-            results_df['error'] = results_df['actual_price'] - results_df['predicted_price']
-            results_df['abs_error'] = np.abs(results_df['error'])
-        
-        mode_name = "真实预测" if prediction_mode == "forecast" else "演示/回测"
-        logger.info(f"  ✅ 预测了 {len(results_df)} 个小时的电价（{mode_name}模式）")
+
+        for mode_label, subset in tasks:
+            if subset is None or len(subset) == 0:
+                logger.info(f"  跳过 {mode_label}: 没有可用数据")
+                continue
+
+            # 确保按时间排序
+            subset = subset.sort_values('timestamp').reset_index(drop=True)
+
+            timestamps = subset['timestamp'].copy()
+
+            # 移除非数值列
+            exclude_cols = ['timestamp']
+            cols_to_drop = [col for col in subset.columns if col in exclude_cols or subset[col].dtype == 'object']
+
+            if cols_to_drop:
+                logger.info(f"  [{mode_label}] 移除列: {cols_to_drop}")
+                subset_clean = subset.drop(columns=cols_to_drop)
+            else:
+                subset_clean = subset.copy()
+
+            # 检查缺失的特征并填充
+            missing_features = set(feature_cols) - set(subset_clean.columns)
+            if missing_features:
+                logger.warning(f"  [{mode_label}] ⚠️ 缺失特征: {missing_features}，将用0填充")
+                for feat in missing_features:
+                    subset_clean[feat] = 0
+
+            X_pred = subset_clean[feature_cols].fillna(0)
+            logger.info(f"  [{mode_label}] ✅ 预测特征: {len(feature_cols)} 个, 待预测行数: {len(X_pred)}")
+
+            preds = model.predict(X_pred)
+            logger.info(f"  [{mode_label}] ✅ 完成 {len(preds)} 个预测")
+
+            # 构建结果DataFrame
+            res_df = pd.DataFrame({
+                'timestamp': timestamps,
+                'predicted_price': preds,
+                'mode': mode_label
+            })
+
+            if 'price' in subset.columns:
+                res_df['actual_price'] = subset['price'].values
+                res_df['error'] = res_df['actual_price'] - res_df['predicted_price']
+                res_df['abs_error'] = np.abs(res_df['error'])
+
+            all_results.append(res_df)
+
+        if len(all_results) == 0:
+            logger.error("没有任何可预测的数据（backtest 和 forecast 都为空）")
+            return False
+
+        results_df = pd.concat(all_results, ignore_index=True).sort_values('timestamp').reset_index(drop=True)
+        logger.info(f"  ✅ 合并后总共 {len(results_df)} 条预测结果")
         
         # 6. 保存预测结果
         logger.info("步骤 6/6: 保存预测结果...")
@@ -173,10 +184,6 @@ def run_inference():
         logger.info(f"  ✅ 最新预测: {latest_file}")
         
         # 打印统计信息
-        logger.info(f"\n{'='*70}")
-        logger.info(f"📊 预测统计 ({mode_name}模式)")
-        logger.info(f"{'='*70}")
-        logger.info(f"  预测模式: {mode_name}")
         logger.info(f"  预测时段: {len(results_df)} 小时")
         logger.info(f"  时间范围: {results_df['timestamp'].min()} 到 {results_df['timestamp'].max()}")
         logger.info(f"  平均预测价格: {results_df['predicted_price'].mean():.2f} EUR/MWh")

@@ -198,13 +198,73 @@ class ENTSOEClient:
                 logger.error(f"❌ 备用方法也失败: {backup_error}")
                 raise
     
+    def _fetch_load_raw_api(self, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+        """
+        直接调用 ENTSO-E REST API 获取负载预测
+        """
+        import requests
+        from xml.etree import ElementTree as ET
+        
+        url = "https://web-api.tp.entsoe.eu/api"
+        params = {
+            'securityToken': self.api_key,
+            'documentType': 'A65',  # System total load forecast
+            'processType': 'A01',   # Day ahead
+            'outBiddingZone_Domain': self.bidding_zone,
+            'periodStart': start.strftime('%Y%m%d%H%M'),
+            'periodEnd': end.strftime('%Y%m%d%H%M')
+        }
+        
+        logger.info(f"  直接调用 ENTSO-E REST API (负载预测)...")
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        
+        # 解析 XML
+        root = ET.fromstring(response.content)
+        ns = {'ns': 'urn:iec62325.351:tc57wg16:451-6:loaddocument:3:0'}
+        
+        timestamps = []
+        loads = []
+        
+        for timeseries in root.findall('.//ns:TimeSeries', ns):
+            for period in timeseries.findall('.//ns:Period', ns):
+                start_time_str = period.find('ns:timeInterval/ns:start', ns).text
+                period_start = pd.to_datetime(start_time_str).tz_convert(TIMEZONE)
+                
+                resolution = period.find('ns:resolution', ns).text
+                freq = pd.Timedelta(hours=1) if resolution == 'PT60M' else pd.Timedelta(minutes=15)
+                
+                for point in period.findall('ns:Point', ns):
+                    position = int(point.find('ns:position', ns).text)
+                    load = float(point.find('ns:quantity', ns).text)
+                    
+                    timestamp = period_start + (position - 1) * freq
+                    timestamps.append(timestamp)
+                    loads.append(load)
+        
+        df = pd.DataFrame({'timestamp': timestamps, 'load_forecast': loads})
+        df = df.drop_duplicates(subset=['timestamp'], keep='first').sort_values('timestamp')
+        
+        logger.info(f"  ✅ 原始 API 返回 {len(timestamps)} 个数据点，去重后 {len(df)} 个")
+        return df
+    
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
     def fetch_load_forecast(self, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
         """
-        获取总负载预测（增强版：带调试信息）
+        获取总负载预测（增强版：优先使用原始 API）
         """
         logger.info(f"获取负载预测: {start} 到 {end}")
         
+        # 优先尝试直接调用 REST API
+        try:
+            df = self._fetch_load_raw_api(start, end)
+            logger.info(f"✅ 成功获取 {len(df)} 条负载预测数据（使用原始 API）")
+            return df
+        except Exception as raw_api_error:
+            logger.warning(f"⚠️  原始 API 调用失败: {raw_api_error}")
+            logger.info(f"  尝试使用 entsoe-py 库...")
+        
+        # 备用方案：使用 entsoe-py 库
         try:
             load = self.client.query_load_forecast(
                 self.bidding_zone,
@@ -252,21 +312,90 @@ class ENTSOEClient:
             logger.error(f"   详细堆栈:\n{traceback.format_exc()}")
             raise
     
+    def _fetch_wind_solar_raw_api(self, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+        """
+        直接调用 ENTSO-E REST API 获取风电和光伏预测
+        """
+        import requests
+        from xml.etree import ElementTree as ET
+        
+        url = "https://web-api.tp.entsoe.eu/api"
+        params = {
+            'securityToken': self.api_key,
+            'documentType': 'A69',  # Wind and solar forecast
+            'processType': 'A01',   # Day ahead
+            'in_Domain': self.bidding_zone,
+            'periodStart': start.strftime('%Y%m%d%H%M'),
+            'periodEnd': end.strftime('%Y%m%d%H%M')
+        }
+        
+        logger.info(f"  直接调用 ENTSO-E REST API (风光预测)...")
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        
+        # 解析 XML
+        root = ET.fromstring(response.content)
+        ns = {'ns': 'urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0'}
+        
+        wind_data = {}
+        solar_data = {}
+        
+        for timeseries in root.findall('.//ns:TimeSeries', ns):
+            # 获取发电类型
+            psr_type_elem = timeseries.find('.//ns:MktPSRType/ns:psrType', ns)
+            if psr_type_elem is None:
+                continue
+            psr_type = psr_type_elem.text
+            
+            for period in timeseries.findall('.//ns:Period', ns):
+                start_time_str = period.find('ns:timeInterval/ns:start', ns).text
+                period_start = pd.to_datetime(start_time_str).tz_convert(TIMEZONE)
+                
+                resolution = period.find('ns:resolution', ns).text
+                freq = pd.Timedelta(hours=1) if resolution == 'PT60M' else pd.Timedelta(minutes=15)
+                
+                for point in period.findall('ns:Point', ns):
+                    position = int(point.find('ns:position', ns).text)
+                    quantity = float(point.find('ns:quantity', ns).text)
+                    
+                    timestamp = period_start + (position - 1) * freq
+                    
+                    # B19 = Solar, B18 = Wind Offshore, B19 = Wind Onshore
+                    if psr_type == 'B16':  # Solar
+                        solar_data[timestamp] = solar_data.get(timestamp, 0) + quantity
+                    elif psr_type in ['B18', 'B19']:  # Wind (Offshore + Onshore)
+                        wind_data[timestamp] = wind_data.get(timestamp, 0) + quantity
+        
+        # 创建 DataFrame
+        all_timestamps = sorted(set(list(wind_data.keys()) + list(solar_data.keys())))
+        
+        df = pd.DataFrame({
+            'timestamp': all_timestamps,
+            'wind_forecast': [wind_data.get(ts, 0) for ts in all_timestamps],
+            'solar_forecast': [solar_data.get(ts, 0) for ts in all_timestamps]
+        })
+        
+        logger.info(f"  ✅ 风光预测获取成功: {len(df)} 个时间点")
+        return df
+    
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
     def fetch_wind_solar_forecast(self, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
         """
-        获取风电和光伏发电预测
-        
-        Args:
-            start: 开始时间
-            end: 结束时间
-            
-        Returns:
-            DataFrame with columns: timestamp, wind_forecast, solar_forecast
+        获取风电和光伏发电预测（优先使用原始 API）
         """
+        logger.info(f"获取风光预测: {start} 到 {end}")
+        
+        # 优先尝试直接调用 REST API
         try:
-            logger.info(f"获取风光预测: {start} 到 {end}")
-            
+            df = self._fetch_wind_solar_raw_api(start, end)
+            logger.info(f"✅ 成功获取 {len(df)} 条风光预测数据（使用原始 API）")
+            return df
+        except Exception as raw_api_error:
+            logger.warning(f"⚠️  原始 API 调用失败: {raw_api_error}")
+            logger.info(f"  尝试使用 entsoe-py 库...")
+        
+        # 备用方案：使用 entsoe-py 库
+        try:
             # 获取风电和光伏预测
             data = self.client.query_wind_and_solar_forecast(
                 self.bidding_zone,

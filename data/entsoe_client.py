@@ -30,13 +30,90 @@ class ENTSOEClient:
         self.client = EntsoePandasClient(api_key=self.api_key)
         self.bidding_zone = BIDDING_ZONE
         
+    def _fetch_prices_raw_api(self, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+        """
+        直接调用 ENTSO-E REST API，绕过 entsoe-py 的解析 bug
+        """
+        import requests
+        from xml.etree import ElementTree as ET
+        
+        # ENTSO-E API 端点
+        url = "https://web-api.tp.entsoe.eu/api"
+        
+        # API 参数
+        params = {
+            'securityToken': self.api_key,
+            'documentType': 'A44',  # Price document
+            'in_Domain': self.bidding_zone,
+            'out_Domain': self.bidding_zone,
+            'periodStart': start.strftime('%Y%m%d%H%M'),
+            'periodEnd': end.strftime('%Y%m%d%H%M')
+        }
+        
+        logger.info(f"  直接调用 ENTSO-E REST API...")
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        
+        # 解析 XML
+        root = ET.fromstring(response.content)
+        
+        # 提取时间序列数据
+        ns = {'ns': 'urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3'}
+        
+        timestamps = []
+        prices = []
+        
+        for timeseries in root.findall('.//ns:TimeSeries', ns):
+            for period in timeseries.findall('.//ns:Period', ns):
+                # 获取起始时间
+                start_time_str = period.find('ns:timeInterval/ns:start', ns).text
+                # 解析时间（格式：2026-01-04T23:00Z）
+                period_start = pd.to_datetime(start_time_str).tz_convert(TIMEZONE)
+                
+                # 获取分辨率（通常是 PT60M = 60分钟）
+                resolution = period.find('ns:resolution', ns).text
+                if resolution == 'PT60M':
+                    freq = pd.Timedelta(hours=1)
+                elif resolution == 'PT15M':
+                    freq = pd.Timedelta(minutes=15)
+                else:
+                    freq = pd.Timedelta(hours=1)
+                
+                # 提取所有数据点
+                for point in period.findall('ns:Point', ns):
+                    position = int(point.find('ns:position', ns).text)
+                    price = float(point.find('ns:price.amount', ns).text)
+                    
+                    # 计算时间戳
+                    timestamp = period_start + (position - 1) * freq
+                    
+                    timestamps.append(timestamp)
+                    prices.append(price)
+        
+        # 创建 DataFrame 并去重
+        df = pd.DataFrame({'timestamp': timestamps, 'price': prices})
+        df = df.drop_duplicates(subset=['timestamp'], keep='first').sort_values('timestamp')
+        
+        logger.info(f"  ✅ 原始 API 返回 {len(timestamps)} 个数据点，去重后 {len(df)} 个")
+        return df
+    
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
     def fetch_day_ahead_prices(self, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
         """
-        获取日前市场价格（增强版：带详细调试信息和容错处理）
+        获取日前市场价格（增强版：优先使用原始 API，避免 entsoe-py 的解析 bug）
         """
         logger.info(f"获取日前价格: {start} 到 {end}")
         
+        # 🔧 优先尝试直接调用 REST API（绕过 entsoe-py bug）
+        try:
+            df = self._fetch_prices_raw_api(start, end)
+            logger.info(f"✅ 成功获取 {len(df)} 条价格数据（使用原始 API）")
+            return df
+        except Exception as raw_api_error:
+            logger.warning(f"⚠️  原始 API 调用失败: {raw_api_error}")
+            logger.info(f"  尝试使用 entsoe-py 库...")
+        
+        # 备用方案：使用 entsoe-py 库
         try:
             prices = self.client.query_day_ahead_prices(
                 self.bidding_zone, 

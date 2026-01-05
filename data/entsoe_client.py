@@ -228,6 +228,7 @@ class ENTSOEClient:
         
         # 🔍 尝试多种可能的命名空间
         possible_namespaces = [
+            {'ns': 'urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0'},  # Generation/Load Document（正确的！）
             {'ns': 'urn:iec62325.351:tc57wg16:451-6:loaddocument:3:0'},
             {'ns': 'urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3'},
             {},  # 无命名空间
@@ -358,7 +359,11 @@ class ENTSOEClient:
             logger.error(f"❌ 获取负载预测失败: {e}")
             import traceback
             logger.error(f"   详细堆栈:\n{traceback.format_exc()}")
-            raise
+            
+            # 🛡️ 最终容错：返回空 DataFrame，让管道继续运行
+            logger.warning("⚠️  所有方法都失败了，返回空负载预测数据")
+            logger.warning("⚠️  后续的数据清洗步骤会使用前向填充或默认值")
+            return pd.DataFrame(columns=['timestamp', 'load_forecast'])
     
     def _fetch_wind_solar_raw_api(self, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
         """

@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SE3 Electricity Price Prediction</title>
+  <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; margin: 24px; color: #222; }
+    .main-header { font-size: 40px; color:#1f77b4; font-weight:700; text-align:center; margin-bottom:6px }
+    .subtitle { text-align:center; color:#666; margin-bottom:20px }
+    .metrics { display:flex; gap:18px; margin:18px 0; }
+    .metric { background:#f7f9fc; padding:18px; border-radius:8px; flex:1; box-shadow: 0 1px 4px rgba(0,0,0,0.04) }
+    .metric .val { font-size:26px; color:#1f77b4; font-weight:700 }
+    .section { margin-top:26px }
+    .grid-2 { display:flex; gap:18px }
+    .card { background:#fff; padding:14px; border-radius:8px; box-shadow: 0 1px 6px rgba(0,0,0,0.04); flex:1 }
+    .laundry-cards { display:flex; gap:12px; margin-top:12px }
+    .laundry-card { background:#f0f2f6; padding:14px; border-radius:8px; flex:1 }
+    .legend { display:flex; gap:10px; align-items:center }
+    .legend .dot { width:12px; height:12px; border-radius:6px }
+    .footer { text-align:center; color:#999; font-size:13px; margin-top:30px }
+    pre.error { background:#fff6f6; border-left:4px solid #ff7f0e; padding:10px }
+  </style>
+</head>
+<body>
+  <div class="main-header">⚡ SE3 Electricity Price Prediction</div>
+  <div class="subtitle">Real-time day-ahead electricity market price predictions for the Stockholm region (SE3) • Powered by XGBoost</div>
+
+  <div id="last-updated" style="margin-bottom:6px"></div>
+
+  <div class="metrics" id="metrics-row">
+    <div class="metric">
+      <div style="color:#666">Average Price</div>
+      <div class="val" id="avg-price">—</div>
+    </div>
+    <div class="metric">
+      <div style="color:#666">Lowest Price</div>
+      <div class="val" id="min-price">—</div>
+    </div>
+    <div class="metric">
+      <div style="color:#666">Highest Price</div>
+      <div class="val" id="max-price">—</div>
+    </div>
+    <div class="metric">
+      <div style="color:#666">Prediction Error (MAE)</div>
+      <div class="val" id="mae">—</div>
+    </div>
+  </div>
+
+  <div id="main-chart" style="height:500px;"></div>
+
+  <div class="laundry" style="margin-top:18px">
+    <div style="display:flex; justify-content:space-between; align-items:center">
+      <h3 style="margin:0">🧺 Laundry Timer - Best periods</h3>
+      <div class="legend">
+        <div class="dot" style="background:#636EFA"></div><div style="font-size:13px">Backtest</div>
+        <div style="width:14px"></div>
+        <div class="dot" style="background:#EF553B"></div><div style="font-size:13px">Forecast</div>
+      </div>
+    </div>
+    <p style="color:#666; margin-top:6px">Below are the cheapest 4-hour periods (within next 24 hours if available).</p>
+    <div class="laundry-cards" id="laundry-cards"></div>
+  </div>
+
+  <div class="section grid-2" style="margin-top:18px">
+    <div class="card">
+      <h4 style="margin-top:4px">📊 Price Distribution</h4>
+      <div id="hist-chart" style="height:300px"></div>
+    </div>
+
+    <div class="card">
+      <h4 style="margin-top:4px">🕐 Hourly Statistics</h4>
+      <div id="hourly-chart" style="height:300px"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="card">
+      <h4>Hourly Heatmap</h4>
+      <div id="heatmap" style="height:360px"></div>
+    </div>
+  </div>
+
+  <div class="section card" style="margin-top:14px">
+    <h4>Details</h4>
+    <pre id="raw-table" style="white-space:pre-wrap; margin:6px 0; font-size:13px"></pre>
+  </div>
+
+  <div class="footer">ID2223 Scalable Machine Learning Project | Powered by Hopsworks, XGBoost & Plotly</div>
+
+<script>
+// Load predictions JSON and render charts
+async function loadAndRender() {
+  const dataPath = './predictions/latest_predictions.json'; // ensure this file is deployed under docs/predictions/
+  let data;
+  try {
+    const resp = await fetch(dataPath);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    data = await resp.json();
+  } catch (err) {
+    document.getElementById('raw-table').textContent = 'Could not load predictions JSON from ' + dataPath + '\n' + err;
+    return;
+  }
+
+  // Parse timestamps and sort
+  data.forEach(d => { d.timestamp = new Date(d.timestamp); });
+  data.sort((a,b) => a.timestamp - b.timestamp);
+
+  // Metrics
+  const prices = data.map(d => d.predicted_price);
+  const avg = prices.reduce((s,x)=>s+x,0)/prices.length;
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  document.getElementById('avg-price').textContent = avg.toFixed(2) + ' EUR/MWh';
+  document.getElementById('min-price').textContent = min.toFixed(2) + ' EUR/MWh';
+  document.getElementById('max-price').textContent = max.toFixed(2) + ' EUR/MWh';
+
+  // MAE if available
+  const absErrors = data.filter(d=>d.abs_error!==undefined).map(d=>d.abs_error);
+  if (absErrors.length) {
+    const mae = absErrors.reduce((s,x)=>s+x,0)/absErrors.length;
+    document.getElementById('mae').textContent = mae.toFixed(2) + ' EUR/MWh';
+  } else {
+    document.getElementById('mae').textContent = 'N/A';
+  }
+
+  // Last updated
+  document.getElementById('last-updated').textContent = 'Last Updated: ' + (new Date()).toLocaleString();
+
+  // Main chart: base line + backtest/forecast colored segments + actual
+  const timestamps = data.map(d=>d.timestamp);
+  const baseTrace = { x: timestamps, y: prices, mode: 'lines', line:{color:'lightgray', width:2}, name:'Predicted (base)', hoverinfo:'skip' };
+
+  // build mode-based y arrays
+  const backY = data.map(d => (d.mode==='backtest'? d.predicted_price : null));
+  const fcastY = data.map(d => (d.mode==='forecast'? d.predicted_price : null));
+  const backTrace = { x: timestamps, y: backY, mode:'lines+markers', name:'Backtest', line:{color:'#636EFA', width:3}, marker:{size:6} };
+  const fcastTrace = { x: timestamps, y: fcastY, mode:'lines+markers', name:'Forecast', line:{color:'#EF553B', width:3}, marker:{size:6} };
+
+  const traces = [baseTrace, backTrace, fcastTrace];
+  // actual
+  const actualTS = data.filter(d=>d.actual_price!==undefined).map(d=>d.timestamp);
+  const actualY = data.filter(d=>d.actual_price!==undefined).map(d=>d.actual_price);
+  if (actualY.length) traces.push({ x: actualTS, y: actualY, mode:'lines+markers', name:'Actual Price', line:{color:'#00CC96', width:2, dash:'dash'} });
+
+  Plotly.newPlot('main-chart', traces, { margin:{t:40}, xaxis:{title:'Time'}, yaxis:{title:'Price (EUR/MWh)'}, hovermode:'x unified' });
+
+  // Laundry cards: cheapest 4 within next 24h if available
+  const now = new Date();
+  const windowEnd = new Date(now.getTime() + 24*3600*1000);
+  const futureWindow = data.filter(d => d.timestamp >= now && d.timestamp <= windowEnd);
+  let cheapestList = (futureWindow.length>=4? futureWindow : data).slice().sort((a,b)=>a.predicted_price - b.predicted_price).slice(0,4);
+
+  const lc = document.getElementById('laundry-cards'); lc.innerHTML = '';
+  cheapestList.forEach((r,i)=>{
+    const div = document.createElement('div'); div.className='laundry-card';
+    div.innerHTML = `<div style="color:#28a745; font-weight:700;">Rank #${i+1}</div>
+                     <div style="margin-top:6px; font-weight:600">${r.timestamp.toLocaleString()}</div>
+                     <div style="margin-top:8px; font-size:20px; color:#1f77b4; font-weight:700">${r.predicted_price.toFixed(2)} EUR/MWh</div>`;
+    lc.appendChild(div);
+  });
+
+  // Histogram
+  Plotly.newPlot('hist-chart', [{ x: prices, type:'histogram', nbinsx:20, marker:{color:'#1f77b4'} }], { margin:{t:30} });
+
+  // Hourly average
+  const hourly = {};
+  data.forEach(d=>{
+    const h = d.timestamp.getHours();
+    hourly[h] = hourly[h]||[]; hourly[h].push(d.predicted_price);
+  });
+  const hours = Object.keys(hourly).sort((a,b)=>a-b);
+  const hourAvg = hours.map(h => hourly[h].reduce((s,x)=>s+x,0)/hourly[h].length);
+  Plotly.newPlot('hourly-chart', [{ x: hours, y: hourAvg, type:'bar', marker:{color:'#636EFA'} }], { margin:{t:30}, xaxis:{title:'Hour'}, yaxis:{title:'Average Price (EUR/MWh)'} });
+
+  // Heatmap: pivot date x hour
+  const byDateHour = {};
+  data.forEach(d=>{
+    const date = d.timestamp.toISOString().slice(0,10);
+    const hour = d.timestamp.getHours();
+    byDateHour[date] = byDateHour[date] || {}; byDateHour[date][hour]=d.predicted_price;
+  });
+  const dates = Object.keys(byDateHour).sort();
+  const hourCols = Array.from({length:24},(_,i)=>i);
+  const z = dates.map(dt=> hourCols.map(h=> byDateHour[dt] && byDateHour[dt][h] !== undefined ? byDateHour[dt][h] : null ));
+
+  Plotly.newPlot('heatmap', [{ z:z, x:hourCols, y:dates, type:'heatmap', colorscale:'RdYlGn_r', colorbar:{title:'EUR/MWh'} }], { margin:{t:30}, xaxis:{title:'Hour'}, yaxis:{title:'Date'} });
+
+  // Raw table (simple)
+  const cols = ['timestamp','predicted_price','mode','actual_price'];
+  let tableText = cols.join('\t') + '\n' + data.map(d=> [d.timestamp.toISOString(), d.predicted_price.toFixed(2), d.mode||'', d.actual_price!==undefined? d.actual_price.toFixed(2):'' ].join('\t')).join('\n');
+  document.getElementById('raw-table').textContent = tableText;
+}
+
+loadAndRender();
+</script>
+</body>
+</html>

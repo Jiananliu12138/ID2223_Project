@@ -50,16 +50,17 @@ class ENTSOEClient:
                 end=end
             )
             
-            # 转换为DataFrame - 使用 reset_index 避免长度不匹配问题
-            if isinstance(prices, pd.Series):
+            # 转换为DataFrame - 最安全的方式
+            if isinstance(prices, (pd.Series, pd.DataFrame)):
+                # 先重置索引，将时间戳变为一列
                 df = prices.reset_index()
-                df.columns = ['timestamp', 'price']
+                # 无论原来叫什么（'index', 'MTU', 'timestamp'），统一重命名
+                df.columns = ['timestamp', 'price'] if df.shape[1] == 2 else ['timestamp'] + [f'price_{i}' for i in range(df.shape[1]-1)]
+                # 如果有多列价格，取第一列
+                if df.shape[1] > 2:
+                    df = df[['timestamp', df.columns[1]]].rename(columns={df.columns[1]: 'price'})
             else:
-                # 如果是DataFrame，直接使用
-                df = prices.copy()
-                if 'timestamp' not in df.columns:
-                    df = df.reset_index()
-                    df.columns = ['timestamp', 'price']
+                raise ValueError(f"返回了意外的数据类型: {type(prices)}")
             
             # 确保时间戳是 datetime 类型
             df['timestamp'] = pd.to_datetime(df['timestamp'])
@@ -93,25 +94,14 @@ class ENTSOEClient:
             
             # 处理DataFrame和Series两种情况
             if isinstance(load, pd.DataFrame):
-                # DataFrame: 取第一列或平均值
-                if load.shape[1] == 1:
-                    load_values = load.iloc[:, 0]
-                else:
-                    load_values = load.mean(axis=1)
-                    logger.info(f"负载预测有 {load.shape[1]} 列，使用平均值")
-            else:
-                # Series: 直接使用
-                load_values = load
+                # 如果是多列（如不同的预测版本），取平均值
+                if load.shape[1] > 1:
+                    load = load.mean(axis=1)
+                    logger.info("负载预测有多个版本，已取平均值")
             
-            # 使用 reset_index 避免长度不匹配问题
-            if isinstance(load_values, pd.Series):
-                df = load_values.reset_index()
-                df.columns = ['timestamp', 'load_forecast']
-            else:
-                df = pd.DataFrame({
-                    'timestamp': load_values.index,
-                    'load_forecast': load_values.values
-                })
+            # 使用 reset_index 转换为 DataFrame
+            df = load.reset_index()
+            df.columns = ['timestamp', 'load_forecast']
             
             # 确保时间戳是 datetime 类型
             df['timestamp'] = pd.to_datetime(df['timestamp'])

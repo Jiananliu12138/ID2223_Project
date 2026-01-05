@@ -33,87 +33,146 @@ class ENTSOEClient:
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
     def fetch_day_ahead_prices(self, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
         """
-        获取日前市场价格
-        
-        Args:
-            start: 开始时间(aware timezone)
-            end: 结束时间(aware timezone)
-            
-        Returns:
-            DataFrame with columns: timestamp, price
+        获取日前市场价格（增强版：带详细调试信息和容错处理）
         """
+        logger.info(f"获取日前价格: {start} 到 {end}")
+        
         try:
-            logger.info(f"获取日前价格: {start} 到 {end}")
             prices = self.client.query_day_ahead_prices(
                 self.bidding_zone, 
                 start=start, 
                 end=end
             )
             
-            # 使用 to_frame() 或 reset_index() - 不手动构造字典
-            # 这样可以避免 index 和 values 长度不匹配的问题
+            # 🔍 详细调试信息
+            logger.info(f"  📊 原始数据类型: {type(prices)}")
+            
             if isinstance(prices, pd.Series):
+                logger.info(f"  📊 Series 长度: {len(prices)}")
+                logger.info(f"  📊 Index 长度: {len(prices.index)}")
+                logger.info(f"  📊 Values 长度: {len(prices.values)}")
+                logger.info(f"  📊 Index 类型: {type(prices.index)}")
+                logger.info(f"  📊 前3个时间戳: {list(prices.index[:3])}")
+                logger.info(f"  📊 后3个时间戳: {list(prices.index[-3:])}")
+                
+                # 检查是否有重复的时间戳
+                duplicates = prices.index.duplicated()
+                if duplicates.any():
+                    logger.warning(f"  ⚠️  发现 {duplicates.sum()} 个重复时间戳！")
+                    # 去重：保留第一个
+                    prices = prices[~duplicates]
+                    logger.info(f"  ✅ 去重后长度: {len(prices)}")
+            
+            elif isinstance(prices, pd.DataFrame):
+                logger.info(f"  📊 DataFrame 形状: {prices.shape}")
+                logger.info(f"  📊 列名: {list(prices.columns)}")
+                logger.info(f"  📊 Index 长度: {len(prices.index)}")
+            
+        except Exception as query_error:
+            logger.error(f"❌ API 查询失败: {query_error}")
+            logger.error(f"   错误类型: {type(query_error).__name__}")
+            import traceback
+            logger.error(f"   详细堆栈:\n{traceback.format_exc()}")
+            raise
+        
+        # 尝试转换为 DataFrame（多种方法）
+        try:
+            if isinstance(prices, pd.Series):
+                # 方法1: to_frame()
                 df = prices.to_frame(name='price').reset_index()
                 df.columns = ['timestamp', 'price']
             else:
-                # 如果是 DataFrame
+                # DataFrame
                 df = prices.reset_index()
                 if len(df.columns) == 2:
                     df.columns = ['timestamp', 'price']
                 else:
-                    # 多列的情况，取第一个数值列
                     df = df.iloc[:, [0, 1]]
                     df.columns = ['timestamp', 'price']
             
-            logger.info(f"成功获取 {len(df)} 条价格数据")
+            logger.info(f"✅ 成功获取 {len(df)} 条价格数据")
             return df
             
-        except Exception as e:
-            logger.error(f"获取日前价格失败: {e}")
-            raise
+        except Exception as convert_error:
+            logger.error(f"❌ DataFrame 转换失败: {convert_error}")
+            logger.error(f"   尝试备用方法...")
+            
+            # 🔧 备用方法：手动构造，但先确保长度一致
+            try:
+                if isinstance(prices, pd.Series):
+                    timestamps = list(prices.index)
+                    values = list(prices.values)
+                    
+                    logger.info(f"  备用方法: timestamps={len(timestamps)}, values={len(values)}")
+                    
+                    # 强制对齐长度
+                    min_len = min(len(timestamps), len(values))
+                    df = pd.DataFrame({
+                        'timestamp': timestamps[:min_len],
+                        'price': values[:min_len]
+                    })
+                    
+                    logger.warning(f"  ⚠️  使用备用方法成功，数据长度: {len(df)}")
+                    return df
+                else:
+                    raise ValueError("备用方法仅支持 Series 类型")
+                    
+            except Exception as backup_error:
+                logger.error(f"❌ 备用方法也失败: {backup_error}")
+                raise
     
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
     def fetch_load_forecast(self, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
         """
-        获取总负载预测
-        
-        Args:
-            start: 开始时间
-            end: 结束时间
-            
-        Returns:
-            DataFrame with columns: timestamp, load_forecast
+        获取总负载预测（增强版：带调试信息）
         """
+        logger.info(f"获取负载预测: {start} 到 {end}")
+        
         try:
-            logger.info(f"获取负载预测: {start} 到 {end}")
             load = self.client.query_load_forecast(
                 self.bidding_zone,
                 start=start,
                 end=end
             )
             
+            logger.info(f"  📊 负载数据类型: {type(load)}")
+            
             # 处理DataFrame和Series两种情况
             if isinstance(load, pd.DataFrame):
-                # DataFrame: 取第一列或平均值
+                logger.info(f"  📊 DataFrame 形状: {load.shape}")
+                logger.info(f"  📊 列名: {list(load.columns)}")
+                
+                # 检查重复索引
+                if load.index.duplicated().any():
+                    logger.warning(f"  ⚠️  发现重复索引，正在去重...")
+                    load = load[~load.index.duplicated()]
+                
                 if load.shape[1] == 1:
                     load_values = load.iloc[:, 0]
                 else:
                     load_values = load.mean(axis=1)
-                    logger.info(f"负载预测有 {load.shape[1]} 列，使用平均值")
+                    logger.info(f"  使用 {load.shape[1]} 列的平均值")
                 
-                # 使用 to_frame() 避免长度不匹配
                 df = load_values.to_frame(name='load_forecast').reset_index()
                 df.columns = ['timestamp', 'load_forecast']
             else:
-                # Series: 使用 to_frame()
+                logger.info(f"  📊 Series 长度: {len(load)}")
+                
+                # 检查重复索引
+                if load.index.duplicated().any():
+                    logger.warning(f"  ⚠️  发现重复索引，正在去重...")
+                    load = load[~load.index.duplicated()]
+                
                 df = load.to_frame(name='load_forecast').reset_index()
                 df.columns = ['timestamp', 'load_forecast']
             
-            logger.info(f"成功获取 {len(df)} 条负载预测数据")
+            logger.info(f"✅ 成功获取 {len(df)} 条负载预测数据")
             return df
             
         except Exception as e:
-            logger.error(f"获取负载预测失败: {e}")
+            logger.error(f"❌ 获取负载预测失败: {e}")
+            import traceback
+            logger.error(f"   详细堆栈:\n{traceback.format_exc()}")
             raise
     
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))

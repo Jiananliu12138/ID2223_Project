@@ -11,6 +11,7 @@ lightgbm
 
 # Feature Store & Model Registry (匹配 Hopsworks 后端 4.2.2)
 hopsworks==4.2.*
+confluent-kafka  # Hopsworks 需要此依赖用于 Kafka 连接
 
 # Monitoring & Visualization
 matplotlib

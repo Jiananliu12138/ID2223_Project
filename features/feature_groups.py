@@ -76,6 +76,10 @@ class FeatureStoreManager:
     def create_electricity_feature_group(self, df: pd.DataFrame) -> None:
         """创建或获取电力市场特征组 (极简版)"""
         logger.info(f"\n🔄 Creating/updating Feature Group: {ELECTRICITY_FG_NAME}")
+        
+        # 创建副本以避免 SettingWithCopyWarning
+        df = df.copy()
+        
         # Ensure numeric columns are float to create FG with float types
         try:
             for col in ['price', 'load_forecast', 'wind_forecast', 'solar_forecast']:
@@ -120,6 +124,17 @@ class FeatureStoreManager:
         """创建或获取天气特征组 (极简版)"""
         logger.info(f"\n🔄 Creating/updating Feature Group: {WEATHER_FG_NAME}")
         
+        # 创建副本以避免 SettingWithCopyWarning
+        df = df.copy()
+        
+        # Ensure numeric weather columns are float so the new FG version uses float types
+        try:
+            for col in ['temperature_avg', 'wind_speed_10m_avg', 'wind_speed_80m_avg', 'irradiance_avg']:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce').astype('float64')
+        except Exception as e:
+            logger.warning(f"Failed to cast weather numeric columns to float: {e}")
+        
         # 完全参考示例代码语法
         weather_fg = self.fs.get_or_create_feature_group(
             name=WEATHER_FG_NAME,
@@ -132,14 +147,6 @@ class FeatureStoreManager:
         logger.info(f"✅ Feature Group '{weather_fg.name}' ready")
         logger.info(f"📤 Inserting {len(df)} rows of weather data...")
 
-        # Ensure numeric weather columns are float so the new FG version uses float types
-        try:
-            for col in ['temperature_avg', 'wind_speed_10m_avg', 'wind_speed_80m_avg', 'irradiance_avg']:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce').astype('float64')
-        except Exception as e:
-            logger.warning(f"Failed to cast weather numeric columns to float: {e}")
-
         # 插入数据
         weather_fg.insert(df, wait=True)
         logger.info("✅ Weather data inserted successfully!")
@@ -147,6 +154,9 @@ class FeatureStoreManager:
     def create_engineered_feature_group(self, df: pd.DataFrame) -> None:
         """创建或获取工程特征组 (极简版)"""
         logger.info(f"\n🔄 Creating/updating Feature Group: {ENGINEERED_FG_NAME}")
+        
+        # 创建副本以避免 SettingWithCopyWarning
+        df = df.copy()
         
         # Ensure all numeric columns are float64 type
         try:

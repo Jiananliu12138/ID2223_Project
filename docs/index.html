@@ -1,200 +1,515 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SE3 Electricity Price Prediction</title>
-  <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
   <style>
-    body { font-family: 'Inter', sans-serif; margin: 24px; color: #222; }
-    .main-header { font-size: 40px; color:#1f77b4; font-weight:700; text-align:center; margin-bottom:6px }
-    .subtitle { text-align:center; color:#666; margin-bottom:20px }
-    .metrics { display:flex; gap:18px; margin:18px 0; }
-    .metric { background:#f7f9fc; padding:18px; border-radius:8px; flex:1; box-shadow: 0 1px 4px rgba(0,0,0,0.04) }
-    .metric .val { font-size:26px; color:#1f77b4; font-weight:700 }
-    .section { margin-top:26px }
-    .grid-2 { display:flex; gap:18px }
-    .card { background:#fff; padding:14px; border-radius:8px; box-shadow: 0 1px 6px rgba(0,0,0,0.04); flex:1 }
-    .laundry-cards { display:flex; gap:12px; margin-top:12px }
-    .laundry-card { background:#f0f2f6; padding:14px; border-radius:8px; flex:1 }
-    .legend { display:flex; gap:10px; align-items:center }
-    .legend .dot { width:12px; height:12px; border-radius:6px }
-    .footer { text-align:center; color:#999; font-size:13px; margin-top:30px }
-    pre.error { background:#fff6f6; border-left:4px solid #ff7f0e; padding:10px }
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      padding: 24px;
+      color: #222;
+      background-color: #f8f9fa;
+    }
+    .main-header {
+      font-size: 40px;
+      font-weight: 700;
+      color: #1f77b4;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      text-align: center;
+      color: #666;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+    .metrics {
+      display: flex;
+      gap: 18px;
+      margin: 20px 0;
+      flex-wrap: wrap;
+    }
+    .metric {
+      background: #f7f9fc;
+      padding: 18px;
+      border-radius: 8px;
+      flex: 1;
+      min-width: 180px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+    }
+    .metric > div:first-child {
+      color: #666;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    .metric .val {
+      font-size: 26px;
+      color: #1f77b4;
+      font-weight: 700;
+    }
+    .section {
+      margin-top: 24px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+    .card {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 1px 6px rgba(0, 0, 0, 0.04);
+    }
+    .card h4 {
+      margin-top: 0;
+      margin-bottom: 16px;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .laundry-cards {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .laundry-card {
+      background: #f0f2f6;
+      padding: 16px;
+      border-left: 4px solid #28a745;
+      border-radius: 4px;
+      flex: 1;
+      min-width: 140px;
+    }
+    .laundry-card > div:first-child {
+      color: #28a745;
+      font-weight: 700;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+    .laundry-card > div:nth-child(2) {
+      margin: 8px 0;
+      font-weight: 600;
+      font-size: 13px;
+    }
+    .laundry-card > div:last-child {
+      font-size: 20px;
+      color: #1f77b4;
+      font-weight: 700;
+    }
+    .legend {
+      display: flex;
+      gap: 20px;
+      align-items: center;
+      font-size: 13px;
+    }
+    .legend-item {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+    }
+    .footer {
+      text-align: center;
+      color: #999;
+      font-size: 12px;
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #e0e0e0;
+    }
+    .error-message {
+      background: #fff6f6;
+      border-left: 4px solid #ff7f0e;
+      padding: 16px;
+      border-radius: 4px;
+      color: #d32f2f;
+      margin: 20px 0;
+    }
+    .success-message {
+      background: #f1f8e9;
+      border-left: 4px solid #4caf50;
+      padding: 12px 16px;
+      border-radius: 4px;
+      color: #33691e;
+      font-size: 13px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 768px) {
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+      .metrics {
+        flex-direction: column;
+      }
+      .metric {
+        min-width: auto;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="main-header">⚡ SE3 Electricity Price Prediction</div>
   <div class="subtitle">Real-time day-ahead electricity market price predictions for the Stockholm region (SE3) • Powered by XGBoost</div>
 
-  <div id="last-updated" style="margin-bottom:6px"></div>
+  <div id="success-message" class="success-message" style="display:none;"></div>
+  <div id="error-message" class="error-message" style="display:none;"></div>
 
-  <div class="metrics" id="metrics-row">
+  <div class="metrics">
     <div class="metric">
-      <div style="color:#666">Average Price</div>
+      <div>Average Price</div>
       <div class="val" id="avg-price">—</div>
     </div>
     <div class="metric">
-      <div style="color:#666">Lowest Price</div>
+      <div>Lowest Price</div>
       <div class="val" id="min-price">—</div>
     </div>
     <div class="metric">
-      <div style="color:#666">Highest Price</div>
+      <div>Highest Price</div>
       <div class="val" id="max-price">—</div>
     </div>
     <div class="metric">
-      <div style="color:#666">Prediction Error (MAE)</div>
+      <div>Prediction Error (MAE)</div>
       <div class="val" id="mae">—</div>
     </div>
   </div>
 
-  <div id="main-chart" style="height:500px;"></div>
-
-  <div class="laundry" style="margin-top:18px">
-    <div style="display:flex; justify-content:space-between; align-items:center">
-      <h3 style="margin:0">🧺 Laundry Timer - Best periods</h3>
-      <div class="legend">
-        <div class="dot" style="background:#636EFA"></div><div style="font-size:13px">Backtest</div>
-        <div style="width:14px"></div>
-        <div class="dot" style="background:#EF553B"></div><div style="font-size:13px">Forecast</div>
+  <div class="card section">
+    <h4 style="margin-top:0">📈 Price Comparison</h4>
+    <div class="legend">
+      <div class="legend-item">
+        <div class="dot" style="background: #636EFA;"></div>
+        <span>Backtest (Past 7 days)</span>
+      </div>
+      <div class="legend-item">
+        <div class="dot" style="background: #EF553B;"></div>
+        <span>Forecast (Next 2 days)</span>
+      </div>
+      <div class="legend-item">
+        <div class="dot" style="background: #00CC96; height: 2px; width: 14px;"></div>
+        <span>Actual Price</span>
       </div>
     </div>
-    <p style="color:#666; margin-top:6px">Below are the cheapest 4-hour periods (within next 24 hours if available).</p>
+    <div id="main-chart" style="height: 500px;"></div>
+  </div>
+
+  <div class="card section">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <h4 style="margin: 0;">🧺 Laundry Timer - Best Periods</h4>
+    </div>
+    <p style="color: #666; margin-top: 8px; font-size: 13px;">Below are the 4 cheapest electricity periods. Periods within the next 24 hours are preferred.</p>
     <div class="laundry-cards" id="laundry-cards"></div>
   </div>
 
-  <div class="section grid-2" style="margin-top:18px">
+  <div class="grid-2 section">
     <div class="card">
-      <h4 style="margin-top:4px">📊 Price Distribution</h4>
-      <div id="hist-chart" style="height:300px"></div>
+      <h4>📊 Price Distribution</h4>
+      <div id="hist-chart" style="height: 300px;"></div>
     </div>
-
     <div class="card">
-      <h4 style="margin-top:4px">🕐 Hourly Statistics</h4>
-      <div id="hourly-chart" style="height:300px"></div>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="card">
-      <h4>Hourly Heatmap</h4>
-      <div id="heatmap" style="height:360px"></div>
+      <h4>🕐 Hourly Average</h4>
+      <div id="hourly-chart" style="height: 300px;"></div>
     </div>
   </div>
 
-  <div class="section card" style="margin-top:14px">
-    <h4>Details</h4>
-    <pre id="raw-table" style="white-space:pre-wrap; margin:6px 0; font-size:13px"></pre>
+  <div class="card section">
+    <h4>Hourly Heatmap</h4>
+    <div id="heatmap" style="height: 360px;"></div>
   </div>
 
-  <div class="footer">ID2223 Scalable Machine Learning Project | Powered by Hopsworks, XGBoost & Plotly</div>
+  <div class="card section">
+    <h4>📋 Data Table</h4>
+    <div style="overflow-x: auto; font-size: 12px;">
+      <table id="data-table" style="width: 100%; border-collapse: collapse;"></table>
+    </div>
+  </div>
+
+  <div class="footer">
+    ID2223 Scalable Machine Learning Project | Powered by Hopsworks, XGBoost & Plotly | © 2026
+  </div>
+
 
 <script>
-// Load predictions JSON and render charts
+// Load predictions JSON and render all charts
 async function loadAndRender() {
-  const dataPath = './predictions/latest_predictions.json'; // ensure this file is deployed under docs/predictions/
-  let data;
-  try {
-    const resp = await fetch(dataPath);
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    data = await resp.json();
-  } catch (err) {
-    document.getElementById('raw-table').textContent = 'Could not load predictions JSON from ' + dataPath + '\n' + err;
+  // Try multiple paths for data loading (GitHub Pages flexibility)
+  const pathsToTry = [
+    './predictions/latest_predictions.json',  // Local docs/predictions
+    '../predictions/latest_predictions.json',  // From docs up to project root
+  ];
+
+  let data = null;
+  let loadedPath = null;
+
+  for (const path of pathsToTry) {
+    try {
+      const resp = await fetch(path);
+      if (resp.ok) {
+        data = await resp.json();
+        loadedPath = path;
+        showSuccess(`Data loaded from: ${path}`);
+        break;
+      }
+    } catch (err) {
+      // Try next path
+    }
+  }
+
+  if (!data || !Array.isArray(data) || data.length === 0) {
+    showError('Could not load prediction data. Please ensure latest_predictions.json exists in docs/predictions/ folder.');
     return;
   }
 
-  // Parse timestamps and sort
-  data.forEach(d => { d.timestamp = new Date(d.timestamp); });
-  data.sort((a,b) => a.timestamp - b.timestamp);
+  // Parse timestamps and sort by time
+  data.forEach(d => {
+    d.timestamp = new Date(d.timestamp);
+  });
+  data.sort((a, b) => a.timestamp - b.timestamp);
 
-  // Metrics
+  // === METRICS ===
   const prices = data.map(d => d.predicted_price);
-  const avg = prices.reduce((s,x)=>s+x,0)/prices.length;
+  const avg = prices.reduce((s, x) => s + x, 0) / prices.length;
   const min = Math.min(...prices);
   const max = Math.max(...prices);
+
   document.getElementById('avg-price').textContent = avg.toFixed(2) + ' EUR/MWh';
   document.getElementById('min-price').textContent = min.toFixed(2) + ' EUR/MWh';
   document.getElementById('max-price').textContent = max.toFixed(2) + ' EUR/MWh';
 
   // MAE if available
-  const absErrors = data.filter(d=>d.abs_error!==undefined).map(d=>d.abs_error);
-  if (absErrors.length) {
-    const mae = absErrors.reduce((s,x)=>s+x,0)/absErrors.length;
+  const absErrors = data.filter(d => d.abs_error !== undefined).map(d => d.abs_error);
+  if (absErrors.length > 0) {
+    const mae = absErrors.reduce((s, x) => s + x, 0) / absErrors.length;
     document.getElementById('mae').textContent = mae.toFixed(2) + ' EUR/MWh';
   } else {
     document.getElementById('mae').textContent = 'N/A';
   }
 
-  // Last updated
-  document.getElementById('last-updated').textContent = 'Last Updated: ' + (new Date()).toLocaleString();
+  // === MAIN CHART (same structure as app.py) ===
+  const timestamps = data.map(d => d.timestamp);
+  
+  // Base gray line
+  const baseTrace = {
+    x: timestamps,
+    y: prices,
+    mode: 'lines',
+    name: 'Predicted (base)',
+    line: { color: 'lightgray', width: 2 },
+    hoverinfo: 'skip',
+    showlegend: false
+  };
 
-  // Main chart: base line + backtest/forecast colored segments + actual
-  const timestamps = data.map(d=>d.timestamp);
-  const baseTrace = { x: timestamps, y: prices, mode: 'lines', line:{color:'lightgray', width:2}, name:'Predicted (base)', hoverinfo:'skip' };
+  // Mode-based colored segments
+  const backY = data.map(d => (d.mode === 'backtest' ? d.predicted_price : null));
+  const fcastY = data.map(d => (d.mode === 'forecast' ? d.predicted_price : null));
 
-  // build mode-based y arrays
-  const backY = data.map(d => (d.mode==='backtest'? d.predicted_price : null));
-  const fcastY = data.map(d => (d.mode==='forecast'? d.predicted_price : null));
-  const backTrace = { x: timestamps, y: backY, mode:'lines+markers', name:'Backtest', line:{color:'#636EFA', width:3}, marker:{size:6} };
-  const fcastTrace = { x: timestamps, y: fcastY, mode:'lines+markers', name:'Forecast', line:{color:'#EF553B', width:3}, marker:{size:6} };
+  const backTrace = {
+    x: timestamps,
+    y: backY,
+    mode: 'lines+markers',
+    name: 'Backtest',
+    line: { color: '#636EFA', width: 3 },
+    marker: { size: 6 }
+  };
+
+  const fcastTrace = {
+    x: timestamps,
+    y: fcastY,
+    mode: 'lines+markers',
+    name: 'Forecast',
+    line: { color: '#EF553B', width: 3 },
+    marker: { size: 6 }
+  };
 
   const traces = [baseTrace, backTrace, fcastTrace];
-  // actual
-  const actualTS = data.filter(d=>d.actual_price!==undefined).map(d=>d.timestamp);
-  const actualY = data.filter(d=>d.actual_price!==undefined).map(d=>d.actual_price);
-  if (actualY.length) traces.push({ x: actualTS, y: actualY, mode:'lines+markers', name:'Actual Price', line:{color:'#00CC96', width:2, dash:'dash'} });
 
-  Plotly.newPlot('main-chart', traces, { margin:{t:40}, xaxis:{title:'Time'}, yaxis:{title:'Price (EUR/MWh)'}, hovermode:'x unified' });
+  // Actual price (if available)
+  const actualData = data.filter(d => d.actual_price !== undefined);
+  if (actualData.length > 0) {
+    const actualTrace = {
+      x: actualData.map(d => d.timestamp),
+      y: actualData.map(d => d.actual_price),
+      mode: 'lines+markers',
+      name: 'Actual Price',
+      line: { color: '#00CC96', width: 2, dash: 'dash' },
+      marker: { size: 6 }
+    };
+    traces.push(actualTrace);
+  }
 
-  // Laundry cards: cheapest 4 within next 24h if available
+  Plotly.newPlot('main-chart', traces, {
+    margin: { t: 40, b: 40, l: 50, r: 50 },
+    xaxis: { title: 'Time' },
+    yaxis: { title: 'Price (EUR/MWh)' },
+    hovermode: 'x unified',
+    template: 'plotly_white'
+  });
+
+  // === LAUNDRY TIMER (same logic as app.py) ===
   const now = new Date();
-  const windowEnd = new Date(now.getTime() + 24*3600*1000);
+  const windowEnd = new Date(now.getTime() + 24 * 3600 * 1000);
   const futureWindow = data.filter(d => d.timestamp >= now && d.timestamp <= windowEnd);
-  let cheapestList = (futureWindow.length>=4? futureWindow : data).slice().sort((a,b)=>a.predicted_price - b.predicted_price).slice(0,4);
 
-  const lc = document.getElementById('laundry-cards'); lc.innerHTML = '';
-  cheapestList.forEach((r,i)=>{
-    const div = document.createElement('div'); div.className='laundry-card';
-    div.innerHTML = `<div style="color:#28a745; font-weight:700;">Rank #${i+1}</div>
-                     <div style="margin-top:6px; font-weight:600">${r.timestamp.toLocaleString()}</div>
-                     <div style="margin-top:8px; font-size:20px; color:#1f77b4; font-weight:700">${r.predicted_price.toFixed(2)} EUR/MWh</div>`;
-    lc.appendChild(div);
+  let cheapestList = futureWindow.length >= 4
+    ? futureWindow.slice().sort((a, b) => a.predicted_price - b.predicted_price).slice(0, 4)
+    : data.slice().sort((a, b) => a.predicted_price - b.predicted_price).slice(0, 4);
+
+  const laundryContainer = document.getElementById('laundry-cards');
+  laundryContainer.innerHTML = '';
+
+  cheapestList.forEach((row, idx) => {
+    const card = document.createElement('div');
+    card.className = 'laundry-card';
+    card.innerHTML = `
+      <div>Ranked #${idx + 1}</div>
+      <div>${row.timestamp.toLocaleString()}</div>
+      <div>${row.predicted_price.toFixed(2)} EUR/MWh</div>
+    `;
+    laundryContainer.appendChild(card);
   });
 
-  // Histogram
-  Plotly.newPlot('hist-chart', [{ x: prices, type:'histogram', nbinsx:20, marker:{color:'#1f77b4'} }], { margin:{t:30} });
+  // === HISTOGRAM ===
+  Plotly.newPlot('hist-chart', [
+    {
+      x: prices,
+      type: 'histogram',
+      nbinsx: 20,
+      marker: { color: '#636EFA' }
+    }
+  ], {
+    margin: { t: 30, b: 40, l: 50, r: 50 },
+    xaxis: { title: 'Price (EUR/MWh)' },
+    yaxis: { title: 'Frequency' },
+    template: 'plotly_white'
+  });
 
-  // Hourly average
-  const hourly = {};
-  data.forEach(d=>{
+  // === HOURLY AVERAGE ===
+  const hourlyData = {};
+  data.forEach(d => {
     const h = d.timestamp.getHours();
-    hourly[h] = hourly[h]||[]; hourly[h].push(d.predicted_price);
+    if (!hourlyData[h]) hourlyData[h] = [];
+    hourlyData[h].push(d.predicted_price);
   });
-  const hours = Object.keys(hourly).sort((a,b)=>a-b);
-  const hourAvg = hours.map(h => hourly[h].reduce((s,x)=>s+x,0)/hourly[h].length);
-  Plotly.newPlot('hourly-chart', [{ x: hours, y: hourAvg, type:'bar', marker:{color:'#636EFA'} }], { margin:{t:30}, xaxis:{title:'Hour'}, yaxis:{title:'Average Price (EUR/MWh)'} });
 
-  // Heatmap: pivot date x hour
+  const hours = Object.keys(hourlyData).sort((a, b) => parseInt(a) - parseInt(b));
+  const hourlyAvg = hours.map(h => {
+    const vals = hourlyData[h];
+    return vals.reduce((s, x) => s + x, 0) / vals.length;
+  });
+
+  Plotly.newPlot('hourly-chart', [
+    {
+      x: hours,
+      y: hourlyAvg,
+      type: 'bar',
+      marker: { color: '#636EFA' }
+    }
+  ], {
+    margin: { t: 30, b: 40, l: 50, r: 50 },
+    xaxis: { title: 'Hour' },
+    yaxis: { title: 'Average Price (EUR/MWh)' },
+    template: 'plotly_white'
+  });
+
+  // === HEATMAP ===
   const byDateHour = {};
-  data.forEach(d=>{
-    const date = d.timestamp.toISOString().slice(0,10);
+  data.forEach(d => {
+    const dateStr = d.timestamp.toISOString().slice(0, 10);
     const hour = d.timestamp.getHours();
-    byDateHour[date] = byDateHour[date] || {}; byDateHour[date][hour]=d.predicted_price;
+    if (!byDateHour[dateStr]) byDateHour[dateStr] = {};
+    byDateHour[dateStr][hour] = d.predicted_price;
   });
+
   const dates = Object.keys(byDateHour).sort();
-  const hourCols = Array.from({length:24},(_,i)=>i);
-  const z = dates.map(dt=> hourCols.map(h=> byDateHour[dt] && byDateHour[dt][h] !== undefined ? byDateHour[dt][h] : null ));
+  const hourCols = Array.from({ length: 24 }, (_, i) => i);
+  const z = dates.map(dt =>
+    hourCols.map(h => byDateHour[dt] && byDateHour[dt][h] !== undefined ? byDateHour[dt][h] : null)
+  );
 
-  Plotly.newPlot('heatmap', [{ z:z, x:hourCols, y:dates, type:'heatmap', colorscale:'RdYlGn_r', colorbar:{title:'EUR/MWh'} }], { margin:{t:30}, xaxis:{title:'Hour'}, yaxis:{title:'Date'} });
+  Plotly.newPlot('heatmap', [
+    {
+      z: z,
+      x: hourCols,
+      y: dates,
+      type: 'heatmap',
+      colorscale: 'RdYlGn_r',
+      colorbar: { title: 'EUR/MWh' }
+    }
+  ], {
+    margin: { t: 30, b: 40, l: 100, r: 50 },
+    xaxis: { title: 'Hour' },
+    yaxis: { title: 'Date' },
+    template: 'plotly_white'
+  });
 
-  // Raw table (simple)
-  const cols = ['timestamp','predicted_price','mode','actual_price'];
-  let tableText = cols.join('\t') + '\n' + data.map(d=> [d.timestamp.toISOString(), d.predicted_price.toFixed(2), d.mode||'', d.actual_price!==undefined? d.actual_price.toFixed(2):'' ].join('\t')).join('\n');
-  document.getElementById('raw-table').textContent = tableText;
+  // === DATA TABLE ===
+  const table = document.getElementById('data-table');
+  table.innerHTML = '';
+
+  // Header
+  const headerRow = table.insertRow();
+  ['Timestamp', 'Predicted Price', 'Mode', 'Actual Price', 'Error'].forEach(col => {
+    const th = document.createElement('th');
+    th.textContent = col;
+    th.style.textAlign = 'left';
+    th.style.padding = '8px';
+    th.style.borderBottom = '2px solid #ddd';
+    th.style.fontWeight = '600';
+    headerRow.appendChild(th);
+  });
+
+  // Data rows
+  data.slice(0, 50).forEach(d => {  // Show first 50 rows
+    const row = table.insertRow();
+    row.style.borderBottom = '1px solid #eee';
+    row.addEventListener('mouseenter', () => row.style.backgroundColor = '#f5f5f5');
+    row.addEventListener('mouseleave', () => row.style.backgroundColor = '');
+
+    const cells = [
+      d.timestamp.toLocaleString(),
+      d.predicted_price.toFixed(2),
+      d.mode || '',
+      d.actual_price !== undefined ? d.actual_price.toFixed(2) : '—',
+      d.error !== undefined ? d.error.toFixed(2) : '—'
+    ];
+
+    cells.forEach(cellData => {
+      const td = document.createElement('td');
+      td.textContent = cellData;
+      td.style.padding = '8px';
+      row.appendChild(td);
+    });
+  });
+
+  // Success message
+  showSuccess(`✅ Last Updated: ${new Date().toLocaleString()}`);
 }
 
-loadAndRender();
+function showError(msg) {
+  const errDiv = document.getElementById('error-message');
+  errDiv.textContent = '❌ ' + msg;
+  errDiv.style.display = 'block';
+}
+
+function showSuccess(msg) {
+  const sucDiv = document.getElementById('success-message');
+  sucDiv.textContent = msg;
+  sucDiv.style.display = 'block';
+}
+
+// Load data on page load
+loadAndRender().catch(err => {
+  showError('Error rendering dashboard: ' + err.message);
+  console.error(err);
+});
 </script>
 </body>
 </html>

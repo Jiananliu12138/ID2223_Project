@@ -1,0 +1,266 @@
+[
+  {
+    "timestamp": "2026-01-05 17:00:00+00:00",
+    "predicted_price": 200.74270629882812,
+    "mode": "forecast",
+    "actual_price": 225.01,
+    "error": 24.267293701171866,
+    "abs_error": 24.267293701171866
+  },
+  {
+    "timestamp": "2026-01-05 19:00:00+00:00",
+    "predicted_price": 138.65512084960938,
+    "mode": "forecast",
+    "actual_price": 171.31,
+    "error": 32.65487915039063,
+    "abs_error": 32.65487915039063
+  },
+  {
+    "timestamp": "2026-01-05 18:00:00+00:00",
+    "predicted_price": 202.07440185546875,
+    "mode": "forecast",
+    "actual_price": 222.17,
+    "error": 20.095598144531237,
+    "abs_error": 20.095598144531237
+  },
+  {
+    "timestamp": "2026-01-05 22:00:00+00:00",
+    "predicted_price": 119.88426208496094,
+    "mode": "forecast",
+    "actual_price": 119.5,
+    "error": -0.3842620849609375,
+    "abs_error": 0.3842620849609375
+  },
+  {
+    "timestamp": "2026-01-05 16:00:00+00:00",
+    "predicted_price": 181.01174926757812,
+    "mode": "forecast",
+    "actual_price": 200.25,
+    "error": 19.238250732421875,
+    "abs_error": 19.238250732421875
+  },
+  {
+    "timestamp": "2026-01-05 14:00:00+00:00",
+    "predicted_price": 153.9614715576172,
+    "mode": "forecast",
+    "actual_price": 163.54,
+    "error": 9.578528442382805,
+    "abs_error": 9.578528442382805
+  },
+  {
+    "timestamp": "2026-01-05 20:00:00+00:00",
+    "predicted_price": 129.245361328125,
+    "mode": "forecast",
+    "actual_price": 137.83,
+    "error": 8.584638671875013,
+    "abs_error": 8.584638671875013
+  },
+  {
+    "timestamp": "2026-01-05 15:00:00+00:00",
+    "predicted_price": 179.31776428222656,
+    "mode": "forecast",
+    "actual_price": 195.05,
+    "error": 15.732235717773449,
+    "abs_error": 15.732235717773449
+  },
+  {
+    "timestamp": "2026-01-05 21:00:00+00:00",
+    "predicted_price": 129.10948181152344,
+    "mode": "forecast",
+    "actual_price": 128.71,
+    "error": -0.39948181152342954,
+    "abs_error": 0.39948181152342954
+  },
+  {
+    "timestamp": "2026-01-05 23:00:00+00:00",
+    "predicted_price": 105.08650970458984,
+    "mode": "forecast",
+    "actual_price": 112.06,
+    "error": 6.9734902954101585,
+    "abs_error": 6.9734902954101585
+  },
+  {
+    "timestamp": "2026-01-06 20:00:00+00:00",
+    "predicted_price": 115.36470794677734,
+    "mode": "forecast",
+    "actual_price": 117.87,
+    "error": 2.505292053222661,
+    "abs_error": 2.505292053222661
+  },
+  {
+    "timestamp": "2026-01-06 18:00:00+00:00",
+    "predicted_price": 145.56666564941406,
+    "mode": "forecast",
+    "actual_price": 156.03,
+    "error": 10.463334350585939,
+    "abs_error": 10.463334350585939
+  },
+  {
+    "timestamp": "2026-01-06 02:00:00+00:00",
+    "predicted_price": 106.91451263427734,
+    "mode": "forecast",
+    "actual_price": 101.03,
+    "error": -5.884512634277343,
+    "abs_error": 5.884512634277343
+  },
+  {
+    "timestamp": "2026-01-06 06:00:00+00:00",
+    "predicted_price": 117.9542007446289,
+    "mode": "forecast",
+    "actual_price": 121.66,
+    "error": 3.7057992553710903,
+    "abs_error": 3.7057992553710903
+  },
+  {
+    "timestamp": "2026-01-06 04:00:00+00:00",
+    "predicted_price": 99.72611999511719,
+    "mode": "forecast",
+    "actual_price": 100.38,
+    "error": 0.653880004882808,
+    "abs_error": 0.653880004882808
+  },
+  {
+    "timestamp": "2026-01-06 07:00:00+00:00",
+    "predicted_price": 134.6388702392578,
+    "mode": "forecast",
+    "actual_price": 153.49,
+    "error": 18.851129760742197,
+    "abs_error": 18.851129760742197
+  },
+  {
+    "timestamp": "2026-01-06 11:00:00+00:00",
+    "predicted_price": 121.25436401367188,
+    "mode": "forecast",
+    "actual_price": 144.38,
+    "error": 23.12563598632812,
+    "abs_error": 23.12563598632812
+  },
+  {
+    "timestamp": "2026-01-06 21:00:00+00:00",
+    "predicted_price": 109.15768432617188,
+    "mode": "forecast",
+    "actual_price": 105.6,
+    "error": -3.5576843261718807,
+    "abs_error": 3.5576843261718807
+  },
+  {
+    "timestamp": "2026-01-06 17:00:00+00:00",
+    "predicted_price": 143.70779418945312,
+    "mode": "forecast",
+    "actual_price": 161.05,
+    "error": 17.342205810546886,
+    "abs_error": 17.342205810546886
+  },
+  {
+    "timestamp": "2026-01-06 13:00:00+00:00",
+    "predicted_price": 112.74787139892578,
+    "mode": "forecast",
+    "actual_price": 127.06,
+    "error": 14.312128601074221,
+    "abs_error": 14.312128601074221
+  },
+  {
+    "timestamp": "2026-01-06 03:00:00+00:00",
+    "predicted_price": 105.61299896240234,
+    "mode": "forecast",
+    "actual_price": 99.11,
+    "error": -6.502998962402344,
+    "abs_error": 6.502998962402344
+  },
+  {
+    "timestamp": "2026-01-06 22:00:00+00:00",
+    "predicted_price": 103.34756469726562,
+    "mode": "forecast",
+    "actual_price": 100.46,
+    "error": -2.8875646972656313,
+    "abs_error": 2.8875646972656313
+  },
+  {
+    "timestamp": "2026-01-06 12:00:00+00:00",
+    "predicted_price": 125.20269775390625,
+    "mode": "forecast",
+    "actual_price": 133.69,
+    "error": 8.487302246093748,
+    "abs_error": 8.487302246093748
+  },
+  {
+    "timestamp": "2026-01-06 08:00:00+00:00",
+    "predicted_price": 155.61483764648438,
+    "mode": "forecast",
+    "actual_price": 189.41,
+    "error": 33.79516235351562,
+    "abs_error": 33.79516235351562
+  },
+  {
+    "timestamp": "2026-01-06 16:00:00+00:00",
+    "predicted_price": 128.57705688476562,
+    "mode": "forecast",
+    "actual_price": 144.95,
+    "error": 16.372943115234364,
+    "abs_error": 16.372943115234364
+  },
+  {
+    "timestamp": "2026-01-06 00:00:00+00:00",
+    "predicted_price": 103.51912689208984,
+    "mode": "forecast",
+    "actual_price": 110.04,
+    "error": 6.5208731079101625,
+    "abs_error": 6.5208731079101625
+  },
+  {
+    "timestamp": "2026-01-06 09:00:00+00:00",
+    "predicted_price": 172.93882751464844,
+    "mode": "forecast",
+    "actual_price": 176.88,
+    "error": 3.941172485351558,
+    "abs_error": 3.941172485351558
+  },
+  {
+    "timestamp": "2026-01-06 05:00:00+00:00",
+    "predicted_price": 116.43145751953125,
+    "mode": "forecast",
+    "actual_price": 109.38,
+    "error": -7.0514575195312545,
+    "abs_error": 7.0514575195312545
+  },
+  {
+    "timestamp": "2026-01-06 15:00:00+00:00",
+    "predicted_price": 136.30557250976562,
+    "mode": "forecast",
+    "actual_price": 132.15,
+    "error": -4.155572509765619,
+    "abs_error": 4.155572509765619
+  },
+  {
+    "timestamp": "2026-01-06 19:00:00+00:00",
+    "predicted_price": 127.34569549560547,
+    "mode": "forecast",
+    "actual_price": 130.71,
+    "error": 3.364304504394539,
+    "abs_error": 3.364304504394539
+  },
+  {
+    "timestamp": "2026-01-06 01:00:00+00:00",
+    "predicted_price": 103.42103576660156,
+    "mode": "forecast",
+    "actual_price": 104.37,
+    "error": 0.948964233398442,
+    "abs_error": 0.948964233398442
+  },
+  {
+    "timestamp": "2026-01-06 10:00:00+00:00",
+    "predicted_price": 140.50308227539062,
+    "mode": "forecast",
+    "actual_price": 161.63,
+    "error": 21.12691772460937,
+    "abs_error": 21.12691772460937
+  },
+  {
+    "timestamp": "2026-01-06 14:00:00+00:00",
+    "predicted_price": 113.50956726074219,
+    "mode": "forecast",
+    "actual_price": 127.72,
+    "error": 14.210432739257811,
+    "abs_error": 14.210432739257811
+  }
+]

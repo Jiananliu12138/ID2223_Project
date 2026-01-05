@@ -219,28 +219,76 @@ class ENTSOEClient:
         response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
         
+        # 🔍 调试：保存原始 XML
+        logger.debug(f"  Response status: {response.status_code}")
+        logger.debug(f"  Response length: {len(response.content)} bytes")
+        
         # 解析 XML
         root = ET.fromstring(response.content)
-        ns = {'ns': 'urn:iec62325.351:tc57wg16:451-6:loaddocument:3:0'}
+        
+        # 🔍 尝试多种可能的命名空间
+        possible_namespaces = [
+            {'ns': 'urn:iec62325.351:tc57wg16:451-6:loaddocument:3:0'},
+            {'ns': 'urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3'},
+            {},  # 无命名空间
+        ]
         
         timestamps = []
         loads = []
+        timeseries_list = []
+        used_ns = {}
         
-        for timeseries in root.findall('.//ns:TimeSeries', ns):
-            for period in timeseries.findall('.//ns:Period', ns):
-                start_time_str = period.find('ns:timeInterval/ns:start', ns).text
+        for ns in possible_namespaces:
+            timeseries_list = root.findall('.//ns:TimeSeries', ns) if ns else root.findall('.//TimeSeries')
+            if timeseries_list:
+                used_ns = ns
+                logger.info(f"  ✅ 找到 {len(timeseries_list)} 个 TimeSeries（命名空间: {ns.get('ns', 'none')}）")
+                break
+        
+        if not timeseries_list:
+            logger.warning(f"  ⚠️  未找到 TimeSeries，尝试查看 XML 根节点...")
+            logger.warning(f"  根节点: {root.tag}")
+            logger.warning(f"  子节点: {[child.tag for child in root][:5]}")
+            # 尝试无命名空间
+            timeseries_list = root.findall('.//TimeSeries')
+        
+        for timeseries in timeseries_list:
+            # 尝试有命名空间和无命名空间两种方式
+            periods = timeseries.findall('.//ns:Period', used_ns) if used_ns else timeseries.findall('.//Period')
+            
+            for period in periods:
+                # 获取起始时间
+                start_elem = period.find('ns:timeInterval/ns:start', used_ns) if used_ns else period.find('.//start')
+                if start_elem is None:
+                    continue
+                start_time_str = start_elem.text
                 period_start = pd.to_datetime(start_time_str).tz_convert(TIMEZONE)
                 
-                resolution = period.find('ns:resolution', ns).text
+                # 获取分辨率
+                res_elem = period.find('ns:resolution', used_ns) if used_ns else period.find('.//resolution')
+                resolution = res_elem.text if res_elem is not None else 'PT60M'
                 freq = pd.Timedelta(hours=1) if resolution == 'PT60M' else pd.Timedelta(minutes=15)
                 
-                for point in period.findall('ns:Point', ns):
-                    position = int(point.find('ns:position', ns).text)
-                    load = float(point.find('ns:quantity', ns).text)
+                # 获取数据点
+                points = period.findall('ns:Point', used_ns) if used_ns else period.findall('.//Point')
+                for point in points:
+                    pos_elem = point.find('ns:position', used_ns) if used_ns else point.find('.//position')
+                    qty_elem = point.find('ns:quantity', used_ns) if used_ns else point.find('.//quantity')
+                    
+                    if pos_elem is None or qty_elem is None:
+                        continue
+                    
+                    position = int(pos_elem.text)
+                    load = float(qty_elem.text)
                     
                     timestamp = period_start + (position - 1) * freq
                     timestamps.append(timestamp)
                     loads.append(load)
+        
+        # 创建 DataFrame
+        if not timestamps:
+            logger.warning("  ⚠️  原始 API 未返回任何数据，将尝试 entsoe-py 库")
+            raise ValueError("No load forecast data from raw API")
         
         df = pd.DataFrame({'timestamp': timestamps, 'load_forecast': loads})
         df = df.drop_duplicates(subset=['timestamp'], keep='first').sort_values('timestamp')

@@ -200,7 +200,7 @@ class FeatureStoreManager:
         )
         
         # Use get_or_create_feature_view to create or get Feature View
-        logger.info(f"  ✨ Creating Feature View with 'price' as label...\")
+        logger.info(f"  ✨ Creating Feature View with 'price' as label...")
         feature_view = self.fs.get_or_create_feature_view(
             name=name,
             description="Electricity market and weather features with price as target",

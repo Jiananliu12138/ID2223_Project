@@ -196,7 +196,7 @@ The workflow file `.github/workflows/daily_update.yml` automatically:
 5. Add secrets in **Advanced settings**
 6. Click **Deploy**!
 
-Your app will be live at: `https://your-username-id2223-project.streamlit.app`
+This app will be live at: `https://jiananliu-id2223-project.streamlit.app`
 
 ---
 
@@ -249,7 +249,7 @@ Your app will be live at: `https://your-username-id2223-project.streamlit.app`
 
 - Persistence Model: MAE = 12.3
 - Linear Regression: MAE = 8.7
-- **XGBoost (Ours)**: MAE = 4.5 ✅
+- **XGBoost (Ours)**: MAE = 4.5 
 
 **Feature Importance (Top 5):**
 
@@ -443,18 +443,12 @@ This project contributes to **sustainable energy consumption**:
 
 ---
 
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) file for details
-
----
-
 ## 👥 Contributors
 
-**Project Team**: [Your Name]  
+**Project Team**: you can you up, no can no bb  
 **Course**: ID2223 Scalable Machine Learning and Deep Learning  
 **Institution**: KTH Royal Institute of Technology  
-**Year**: 2024-2025
+**Year**: 2025-2026
 
 ---
 
@@ -466,16 +460,6 @@ MIT License - see [LICENSE](LICENSE) file for details
 - **Open-Meteo** for free weather API
 - **Streamlit** for rapid UI development
 - **Nord Pool** for electricity market operations
-
----
-
-## 📧 Contact
-
-For questions or collaboration:
-
-- **GitHub Issues**: [Create an issue](https://github.com/your-username/ID2223_Project/issues)
-- **Email**: your.email@kth.se
-- **LinkedIn**: [Your Profile](https://linkedin.com/in/yourprofile)
 
 ---
 

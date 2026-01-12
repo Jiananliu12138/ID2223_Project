@@ -5,6 +5,9 @@
 
 ---
 
+Dashboard URL: https://id2223project-ps652jjba8ngcegxzjex92.streamlit.app/
+
+---
 ## 📖 Project Overview
 
 This project builds an end-to-end serverless machine learning system for predicting day-ahead electricity spot prices in Sweden's SE3 region (Stockholm). The system adopts a **Feature Store-centric architecture**, leveraging **Hopsworks** as the centralized feature repository to decouple feature engineering, model training, and inference into independent pipelines.

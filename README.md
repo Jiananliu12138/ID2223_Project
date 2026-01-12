@@ -104,7 +104,7 @@ ID2223_Project/
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/ID2223_Project.git
+git clone https://github.com/Jiannanliu12138/ID2223_Project.git
 cd ID2223_Project
 
 # Create virtual environment
@@ -122,10 +122,10 @@ Create a `.env` file in the project root:
 
 ```env
 # ENTSO-E API
-ENTSOE_API_KEY=your_entso_api_key_here
+ENTSOE_API_KEY=...
 
 # Hopsworks
-HOPSWORKS_API_KEY=your_hopsworks_api_key_here
+HOPSWORKS_API_KEY=...
 HOPSWORKS_PROJECT_NAME=electricity_price_prediction
 ```
 
@@ -196,7 +196,7 @@ The workflow file `.github/workflows/daily_update.yml` automatically:
 5. Add secrets in **Advanced settings**
 6. Click **Deploy**!
 
-This app will be live at: `https://jiananliu-id2223-project.streamlit.app`
+This app will be live at: `https://jiananliu12138-id2223-project.streamlit.app`
 
 ---
 
